@@ -1,0 +1,237 @@
+﻿# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.docker/
+
+# Temporary folders
+tmp/
+temp/
+
+# Build outputs
+dist/
+build/
+
+# ===========================================
+# SOC2 COMPLIANCE - Exclude non-production files
+# ===========================================
+
+# Development/Debug Scripts (not for production)
+test-*.js
+test-*.mjs
+check-*.js
+check-*.mjs
+debug-*.js
+debug-*.mjs
+verify-*.js
+verify-*.mjs
+validate-*.js
+validate-*.mjs
+diagnose-*.js
+diagnose-*.mjs
+prove-*.js
+inspect-*.js
+inspect-*.mjs
+trigger-*.js
+trigger-*.mjs
+run-*.js
+run-*.mjs
+fix-*.js
+fix-*.mjs
+delete-*.js
+delete-*.mjs
+clear-*.js
+clear-*.mjs
+find-*.js
+find-*.mjs
+get-*.js
+dump-*.js
+transform-*.mjs
+ingest-*.mjs
+scan-*.mjs
+fetch-*.mjs
+decrypt-*.js
+register-*.js
+setup-*.js
+update-*.js
+clean-*.js
+cleanup-*.mjs
+populate-*.mjs
+list-*.mjs
+show-*.mjs
+remove-*.js
+monitor-*.mjs
+build-*.mjs
+discover-*.mjs
+add-*.js
+analyze-*.js
+
+# Test Results & Debug Output
+test-results/
+*.stackdump
+collector-validation-results.json
+baseline-results-*.json
+graph-test-output.json
+llm-response-debug.json
+layer1-cache.json
+bulk-cache.json
+discovery-test.json
+apex-test.json
+resp.json
+debt-summary.json
+workflow-data.json
+workflow-sample.json
+
+# Debug Flow/XML files
+debug-flow-*.xml
+latest-*.xml
+corrected-*.xml
+fieldupdate-flow.xml
+
+# Session & Working Documentation (not official docs)
+*_SESSION*.md
+*_SUMMARY*.md
+*_COMPLETE*.md
+*_IMPLEMENTATION*.md
+*_INTEGRATION*.md
+*_ARCHITECTURE*.md
+*_DESIGN*.md
+*_ANALYSIS*.md
+*_GUIDE*.md
+*_PLAN*.md
+*_STATUS*.md
+*_FIX*.md
+*_REPORT*.md
+*_STRATEGY*.md
+*_TRUTH*.md
+*_SPEC*.md
+*_ADDED*.md
+*_RESULTS*.md
+AGENTS.md
+FlowMetatDoc.txt
+*.txt.working
+
+# Temporary/Working files
+temp_*.py
+temp_*.json
+nul
+*.err
+*_job_id.txt
+*_process_id.txt
+cookies.txt
+files.zip
+files/
+image.png
+image1.png
+tsconfig.json
+
+# Docker compose variants (keep main ones only)
+docker-compose-*.yml
+!docker-compose.yml
+!docker-compose.prod.yml
+
+# Local Claude/AI config
+.claude/settings.local.json
+
+# Scripts not needed in production
+org-registry.js
+health-check.js
+flow-*.js
+!src/**/*.js
+
+# Credential/OAuth scripts (SECURITY)
+*oauth*.js
+*creds*.js
+*credentials*.js
+*secret*.js
+*decrypt*.js
+*encrypt*.js
+
+# ===========================================
+# Keep these patterns (production essentials)
+# ===========================================
+# !src/
+# !public/
+# !scripts/start-*.js
+# !scripts/pre-commit-check.js
+# !scripts/validate-services.js
+# !docs/README.md
+# !package.json
+# !package-lock.json
+# !Dockerfile
+# !docker-compose.yml
+# !docker-compose.prod.yml
+# !.github/
+
+# Auto Claude data directory
+.auto-claude/
+
+# Sandbox generated files (keep structure, ignore contents)
+sandbox/apps/*
+!sandbox/apps/.gitkeep
+sandbox/test-data/*
+!sandbox/test-data/.gitkeep
+
+# Temp claude files
+tmpclaude-*
+
+# Test outputs
+*_test.json
+test_*.json
+*_output.json
+test-output.txt
+
+# Backup files  
+*.bak
+*.backup
+.git.bak/
+
+# Large data files
+*.json.large
+extracted-workflow-data/
+data-export/
+

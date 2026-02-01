@@ -1,0 +1,125 @@
+{
+  "name": "healthcare-default",
+  "version": "1.0.0",
+  "description": "Default healthcare policy pack for Metalligent Healthcare platform",
+  "metadata": {
+    "author": "Metalligent Healthcare",
+    "compliance": ["HIPAA", "SOC2"],
+    "lastUpdated": "2025-01-31"
+  },
+  "rules": [
+    {
+      "id": "phi-protection",
+      "description": "Enforce PHI protection mode when PHI is detected",
+      "priority": 200,
+      "intentModeCondition": {
+        "sensitivity": "PHI"
+      },
+      "intentMode": "PHI_PROTECTION",
+      "overrides": {
+        "requireApproval": true,
+        "auditLevel": "full",
+        "encryptionRequired": true
+      }
+    },
+    {
+      "id": "pii-protection",
+      "description": "Enhanced protection for PII",
+      "priority": 180,
+      "intentModeCondition": {
+        "sensitivity": "PII"
+      },
+      "intentMode": "GUARDRAIL_ENFORCEMENT",
+      "overrides": {
+        "requireApproval": true,
+        "auditLevel": "enhanced"
+      }
+    },
+    {
+      "id": "clinical-hours-deployment",
+      "description": "Block deployments during clinical hours",
+      "priority": 150,
+      "intentModeCondition": {
+        "isDeployment": true,
+        "hour": { "$gte": 6, "$lt": 22 },
+        "dayOfWeek": { "$in": [1, 2, 3, 4, 5] }
+      },
+      "intentMode": "CLINICAL_HOURS",
+      "overrides": {
+        "blockDeployments": true,
+        "requireApproval": true
+      }
+    },
+    {
+      "id": "migration-readiness",
+      "description": "Migration readiness mode for migration tasks",
+      "priority": 140,
+      "intentModeCondition": {
+        "isMigration": true
+      },
+      "intentMode": "MIGRATION_READINESS",
+      "overrides": {
+        "requireApproval": true,
+        "requireTestCoverage": true
+      }
+    },
+    {
+      "id": "block-phi-export",
+      "description": "Block bulk PHI exports without approval",
+      "priority": 250,
+      "validationCondition": {
+        "task.type": { "$in": ["data_export", "bulk_export", "report_export"] },
+        "hasPHI": true,
+        "context.approved": { "$ne": true }
+      },
+      "action": "block",
+      "message": "PHI exports require explicit approval. Please obtain approval before proceeding.",
+      "severity": "error"
+    },
+    {
+      "id": "block-schema-deletion",
+      "description": "Block field/object deletion without approval",
+      "priority": 220,
+      "validationCondition": {
+        "task.type": { "$in": ["field_delete", "object_delete", "schema_delete"] },
+        "context.approved": { "$ne": true }
+      },
+      "action": "block",
+      "message": "Schema deletions require explicit approval due to potential data loss.",
+      "severity": "error"
+    },
+    {
+      "id": "warn-automation-change",
+      "description": "Warn on automation changes during business hours",
+      "priority": 100,
+      "validationCondition": {
+        "task.type": { "$in": ["flow_modify", "trigger_modify", "automation_change"] },
+        "hour": { "$gte": 9, "$lt": 17 }
+      },
+      "action": "warn",
+      "message": "Modifying automation during business hours may impact active users.",
+      "severity": "warning"
+    },
+    {
+      "id": "require-audit-compliance",
+      "description": "Enable audit compliance for sensitive operations",
+      "priority": 175,
+      "intentModeCondition": {
+        "taskType": { "$in": ["user_access_change", "permission_change", "security_setting"] }
+      },
+      "intentMode": "AUDIT_COMPLIANCE",
+      "overrides": {
+        "auditLevel": "full",
+        "requireChangeTicket": true
+      }
+    },
+    {
+      "id": "default-guardrail",
+      "description": "Default to guardrail enforcement",
+      "priority": 1,
+      "intentModeCondition": {},
+      "intentMode": "GUARDRAIL_ENFORCEMENT",
+      "overrides": {}
+    }
+  ]
+}

@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare AI Assistant</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f4f8;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: white;
+        }
+
+        /* Header */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+            color: white;
+        }
+
+        .app-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .app-header h1 i {
+            font-size: 22px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .mode-badge {
+            padding: 4px 12px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.error { background: #f87171; }
+        .status-dot.warning { background: #fbbf24; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-section {
+            padding: 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .sidebar-section h3 {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .mode-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .mode-option {
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .mode-option:hover {
+            background: #e0f2fe;
+        }
+
+        .mode-option.active {
+            background: #0891b2;
+            color: white;
+        }
+
+        .mode-option .mode-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .mode-option .mode-desc {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .quick-action {
+            padding: 10px 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+
+        .quick-action:hover {
+            border-color: #0891b2;
+            background: #f0fdfa;
+        }
+
+        .quick-action i {
+            color: #0891b2;
+            margin-right: 8px;
+        }
+
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .message.assistant {
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 75%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-bubble {
+            background: #0891b2;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-bubble h2 {
+            font-size: 15px;
+            margin-bottom: 10px;
+            color: #0f172a;
+        }
+
+        .message-bubble h3 {
+            font-size: 13px;
+            margin: 12px 0 8px;
+            color: #334155;
+        }
+
+        .message-bubble ul, .message-bubble ol {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        .message-bubble li {
+            margin-bottom: 4px;
+        }
+
+        .message-bubble code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .message-bubble pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .message-bubble pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+        }
+
+        /* Findings */
+        .finding {
+            padding: 10px 14px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+
+        .finding.critical {
+            background: #fef2f2;
+            border-color: #dc2626;
+        }
+
+        .finding.high {
+            background: #fff7ed;
+            border-color: #ea580c;
+        }
+
+        .finding.medium {
+            background: #fffbeb;
+            border-color: #d97706;
+        }
+
+        .finding.low {
+            background: #f0fdf4;
+            border-color: #16a34a;
+        }
+
+        .finding.info {
+            background: #eff6ff;
+            border-color: #2563eb;
+        }
+
+        .finding-severity {
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        /* Actions */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .action-btn {
+            padding: 8px 14px;
+            background: #0891b2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: #0e7490;
+        }
+
+        .action-btn.risk-high {
+            background: #dc2626;
+        }
+
+        .action-btn .risk-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+
+        /* Reasoning Chain */
+        .reasoning-toggle {
+            background: none;
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 12px;
+        }
+
+        .reasoning-toggle:hover {
+            background: #f8fafc;
+        }
+
+        .reasoning-chain {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .reasoning-chain.show {
+            display: block;
+        }
+
+        .reasoning-step {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .reasoning-step:last-child {
+            border-bottom: none;
+        }
+
+        .reasoning-step strong {
+            color: #0891b2;
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .input-wrapper textarea {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            resize: none;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 52px;
+            max-height: 120px;
+        }
+
+        .input-wrapper textarea:focus {
+            outline: none;
+            border-color: #0891b2;
+            box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+        }
+
+        .send-btn {
+            padding: 14px 20px;
+            background: #0891b2;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #0e7490;
+        }
+
+        .send-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 18px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            max-width: 200px;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            background: #0891b2;
+            border-radius: 50%;
+            animation: bounce 1.4s ease-in-out infinite;
+        }
+
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Compliance Badge */
+        .compliance-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .compliance-badge.compliant {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .compliance-badge.non_compliant {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .compliance-badge.needs_review {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="app-header">
+            <h1><i class="bi bi-heart-pulse"></i> Healthcare AI Assistant</h1>
+            <div class="header-controls">
+                <span class="mode-badge" id="currentMode">CLINICAL_DECISION_SUPPORT</span>
+                <div class="status-indicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Ready</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <h3>Intent Mode</h3>
+                    <div class="mode-selector" id="modeSelector">
+                        <div class="mode-option active" data-mode="CLINICAL_DECISION_SUPPORT">
+                            <div class="mode-name"><i class="bi bi-activity"></i> Clinical Decision Support</div>
+                            <div class="mode-desc">Assist with clinical decisions</div>
+                        </div>
+                        <div class="mode-option" data-mode="PHI_PROTECTION">
+                            <div class="mode-name"><i class="bi bi-shield-lock"></i> PHI Protection</div>
+                            <div class="mode-desc">Maximum data protection</div>
+                        </div>
+                        <div class="mode-option" data-mode="COMPLIANCE_AUDIT">
+                            <div class="mode-name"><i class="bi bi-clipboard-check"></i> Compliance Audit</div>
+                            <div class="mode-desc">HIPAA compliance checking</div>
+                        </div>
+                        <div class="mode-option" data-mode="EMERGENCY_TRIAGE">
+                            <div class="mode-name"><i class="bi bi-exclamation-triangle"></i> Emergency Triage</div>
+                            <div class="mode-desc">Urgent care prioritization</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Quick Actions</h3>
+                    <div class="quick-actions">
+                        <button class="quick-action" onclick="sendQuickQuery('Audit all PHI fields')">
+                            <i class="bi bi-search"></i> Audit PHI Fields
+                        </button>
+                        <button class="quick-action" onclick="sendQuickQuery('Check HIPAA compliance status')">
+                            <i class="bi bi-check-circle"></i> HIPAA Status
+                        </button>
+                        <button class="quick-action" onclick="sendQuickQuery('Show clinical hours restrictions')">
+                            <i class="bi bi-clock"></i> Clinical Hours
+                        </button>
+                        <button class="quick-action" onclick="sendQuickQuery('Analyze drug interactions')">
+                            <i class="bi bi-capsule"></i> Drug Interactions
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>System Status</h3>
+                    <div id="systemStatus" style="font-size: 12px; color: #64748b;">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message assistant">
+                        <div class="message-bubble">
+                            <h2>Welcome to Healthcare AI Assistant</h2>
+                            <p>I can help you with:</p>
+                            <ul>
+                                <li>PHI field auditing and compliance</li>
+                                <li>Clinical decision support</li>
+                                <li>Drug interaction checking</li>
+                                <li>HIPAA compliance validation</li>
+                                <li>Change impact analysis for healthcare data</li>
+                            </ul>
+                            <p style="margin-top: 12px;">Select an intent mode on the left or ask me anything.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <textarea
+                                id="userInput"
+                                placeholder="Ask about PHI compliance, clinical decisions, or healthcare data..."
+                                rows="1"
+                                onkeydown="handleKeyDown(event)"
+                            ></textarea>
+                        </div>
+                        <button class="send-btn" onclick="sendMessage()" id="sendBtn">
+                            <i class="bi bi-send"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'CLINICAL_DECISION_SUPPORT';
+        let isProcessing = false;
+
+        // Mode-specific configurations with real slash commands
+        const MODE_CONFIG = {
+            CLINICAL_DECISION_SUPPORT: {
+                name: 'Clinical Decision Support',
+                placeholder: 'Try: /patient MRN-12345, /drug-check aspirin warfarin, /lab-interpret...',
+                commands: [
+                    { cmd: '/patient', desc: 'Get patient summary', example: '/patient MRN-12345' },
+                    { cmd: '/drug-check', desc: 'Check drug interactions', example: '/drug-check aspirin warfarin' },
+                    { cmd: '/lab-interpret', desc: 'Interpret lab results', example: '/lab-interpret glucose=180' },
+                    { cmd: '/diagnosis', desc: 'Get ICD-10 codes', example: '/diagnosis chest pain' },
+                    { cmd: '/treatment', desc: 'Treatment recommendations', example: '/treatment diabetes type 2' },
+                    { cmd: '/care-gaps', desc: 'Identify care gaps', example: '/care-gaps MRN-12345' }
+                ],
+                quickActions: [
+                    { label: 'Drug Interactions', query: '/drug-check', icon: 'bi-capsule' },
+                    { label: 'Lab Results', query: '/lab-interpret', icon: 'bi-droplet' },
+                    { label: 'Diagnosis Codes', query: '/diagnosis', icon: 'bi-file-medical' },
+                    { label: 'Care Gaps', query: '/care-gaps', icon: 'bi-clipboard2-pulse' }
+                ]
+            },
+            PHI_PROTECTION: {
+                name: 'PHI Protection',
+                placeholder: 'Try: /phi-audit, /access-log, /data-classify, /redact-check...',
+                commands: [
+                    { cmd: '/phi-audit', desc: 'Audit all PHI fields', example: '/phi-audit' },
+                    { cmd: '/phi-scan', desc: 'Scan for PHI in automation', example: '/phi-scan Flow' },
+                    { cmd: '/access-log', desc: 'Review PHI access', example: '/access-log last 24h' },
+                    { cmd: '/data-classify', desc: 'Classify data sensitivity', example: '/data-classify Patient__c' },
+                    { cmd: '/redact-check', desc: 'Check redaction rules', example: '/redact-check SSN' },
+                    { cmd: '/encryption-status', desc: 'Field encryption status', example: '/encryption-status' }
+                ],
+                quickActions: [
+                    { label: 'PHI Audit', query: '/phi-audit', icon: 'bi-shield-lock' },
+                    { label: 'Access Log', query: '/access-log last 24h', icon: 'bi-journal-text' },
+                    { label: 'Data Classification', query: '/data-classify', icon: 'bi-tags' },
+                    { label: 'Encryption Status', query: '/encryption-status', icon: 'bi-lock' }
+                ]
+            },
+            COMPLIANCE_AUDIT: {
+                name: 'Compliance Audit',
+                placeholder: 'Try: /hipaa-check, /audit-report, /consent-verify, /breach-risk...',
+                commands: [
+                    { cmd: '/hipaa-check', desc: 'HIPAA compliance scan', example: '/hipaa-check' },
+                    { cmd: '/audit-report', desc: 'Generate audit report', example: '/audit-report 2024-Q1' },
+                    { cmd: '/consent-verify', desc: 'Verify patient consent', example: '/consent-verify MRN-12345' },
+                    { cmd: '/breach-risk', desc: 'Assess breach risk', example: '/breach-risk' },
+                    { cmd: '/policy-violations', desc: 'List policy violations', example: '/policy-violations last 7d' },
+                    { cmd: '/access-audit', desc: 'Audit user access', example: '/access-audit admin users' }
+                ],
+                quickActions: [
+                    { label: 'HIPAA Check', query: '/hipaa-check', icon: 'bi-clipboard-check' },
+                    { label: 'Audit Report', query: '/audit-report', icon: 'bi-file-earmark-text' },
+                    { label: 'Breach Risk', query: '/breach-risk', icon: 'bi-exclamation-diamond' },
+                    { label: 'Policy Violations', query: '/policy-violations last 7d', icon: 'bi-x-circle' }
+                ]
+            },
+            EMERGENCY_TRIAGE: {
+                name: 'Emergency Triage',
+                placeholder: 'Try: /triage, /critical-alert, /allergy-check, /protocol...',
+                commands: [
+                    { cmd: '/triage', desc: 'Triage assessment', example: '/triage chest pain shortness of breath' },
+                    { cmd: '/critical-alert', desc: 'Critical value alerts', example: '/critical-alert potassium=6.5' },
+                    { cmd: '/allergy-check', desc: 'Urgent allergy check', example: '/allergy-check penicillin MRN-12345' },
+                    { cmd: '/protocol', desc: 'Emergency protocol', example: '/protocol STEMI' },
+                    { cmd: '/vitals-trend', desc: 'Vital signs trend', example: '/vitals-trend MRN-12345' },
+                    { cmd: '/code-team', desc: 'Code team status', example: '/code-team' }
+                ],
+                quickActions: [
+                    { label: 'Triage Now', query: '/triage', icon: 'bi-exclamation-triangle' },
+                    { label: 'Critical Alerts', query: '/critical-alert', icon: 'bi-bell' },
+                    { label: 'Allergy Check', query: '/allergy-check', icon: 'bi-heart-pulse' },
+                    { label: 'Protocols', query: '/protocol', icon: 'bi-journal-medical' }
+                ]
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSystemStatus();
+            setupModeSelector();
+            autoResizeTextarea();
+            updateUIForMode(currentMode);
+        });
+
+        function setupModeSelector() {
+            document.querySelectorAll('.mode-option').forEach(option => {
+                option.addEventListener('click', () => {
+                    document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+                    option.classList.add('active');
+                    currentMode = option.dataset.mode;
+                    document.getElementById('currentMode').textContent = currentMode;
+                    updateUIForMode(currentMode);
+                });
+            });
+        }
+
+        function updateUIForMode(mode) {
+            const config = MODE_CONFIG[mode];
+            if (!config) return;
+
+            // Update placeholder
+            document.getElementById('userInput').placeholder = config.placeholder;
+
+            // Update quick actions
+            const actionsContainer = document.querySelector('.quick-actions');
+            actionsContainer.innerHTML = config.quickActions.map(a => `
+                <button class="quick-action" onclick="sendQuickQuery('${a.query}')">
+                    <i class="bi ${a.icon}"></i> ${a.label}
+                </button>
+            `).join('');
+
+            // Show available commands in chat
+            const commandsHtml = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        <h3><i class="bi bi-terminal"></i> ${config.name} Commands</h3>
+                        <div style="margin-top: 10px;">
+                            ${config.commands.map(c => `
+                                <div style="margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; cursor: pointer;"
+                                     onclick="document.getElementById('userInput').value='${c.example}'; document.getElementById('userInput').focus();">
+                                    <code style="color: #0891b2; font-weight: 600;">${c.cmd}</code>
+                                    <span style="color: #64748b; margin-left: 8px;">${c.desc}</span>
+                                    <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Example: ${c.example}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Add to chat
+            const messagesDiv = document.getElementById('chatMessages');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = commandsHtml;
+            messagesDiv.appendChild(tempDiv.firstElementChild);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/healthcare/clinical-hours');
+                const data = await response.json();
+
+                const statusHtml = `
+                    <div style="margin-bottom: 8px;">
+                        <strong>Clinical Hours:</strong> ${data.isWithinClinicalHours ? '<span style="color: #16a34a;">Active</span>' : '<span style="color: #64748b;">Inactive</span>'}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>Time:</strong> ${new Date(data.currentTime).toLocaleTimeString()}
+                    </div>
+                `;
+                document.getElementById('systemStatus').innerHTML = statusHtml;
+                updateStatus('ready');
+            } catch (error) {
+                document.getElementById('systemStatus').innerHTML = '<span style="color: #dc2626;">Error loading status</span>';
+                updateStatus('error');
+            }
+        }
+
+        function updateStatus(status) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+
+            dot.className = 'status-dot';
+            switch(status) {
+                case 'ready':
+                    text.textContent = 'Ready';
+                    break;
+                case 'processing':
+                    dot.classList.add('warning');
+                    text.textContent = 'Processing...';
+                    break;
+                case 'error':
+                    dot.classList.add('error');
+                    text.textContent = 'Error';
+                    break;
+            }
+        }
+
+        function autoResizeTextarea() {
+            const textarea = document.getElementById('userInput');
+            textarea.addEventListener('input', () => {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+            });
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function sendQuickQuery(query) {
+            document.getElementById('userInput').value = query;
+            sendMessage();
+        }
+
+        // Parse slash commands
+        function parseCommand(input) {
+            const match = input.match(/^\/([a-z-]+)\s*(.*)?$/i);
+            if (match) {
+                return {
+                    isCommand: true,
+                    command: match[1].toLowerCase(),
+                    args: match[2] ? match[2].trim() : ''
+                };
+            }
+            return { isCommand: false, query: input };
+        }
+
+        // Handle /help command locally
+        function showHelp() {
+            const config = MODE_CONFIG[currentMode];
+            const allModes = Object.keys(MODE_CONFIG);
+
+            const helpHtml = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        <h2><i class="bi bi-question-circle"></i> Healthcare AI Assistant Help</h2>
+
+                        <h3>Current Mode: ${config.name}</h3>
+                        <p style="color: #64748b; margin-bottom: 12px;">Switch modes in the sidebar to access different commands.</p>
+
+                        <h3>Available Commands (${config.name})</h3>
+                        <div style="margin: 10px 0;">
+                            ${config.commands.map(c => `
+                                <div style="margin-bottom: 6px; padding: 6px 10px; background: #f0f9ff; border-radius: 4px; cursor: pointer;"
+                                     onclick="document.getElementById('userInput').value='${c.example}'; document.getElementById('userInput').focus();">
+                                    <code style="color: #0891b2; font-weight: 600;">${c.cmd}</code>
+                                    <span style="color: #475569; margin-left: 8px;">${c.desc}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <h3>All Intent Modes</h3>
+                        <div style="margin: 10px 0;">
+                            ${allModes.map(m => `
+                                <div style="margin-bottom: 4px; padding: 4px 10px; ${m === currentMode ? 'background: #0891b2; color: white;' : 'background: #f1f5f9;'} border-radius: 4px;">
+                                    <strong>${MODE_CONFIG[m].name}</strong>
+                                    ${m === currentMode ? ' (active)' : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <h3>Global Commands</h3>
+                        <div style="margin: 10px 0; padding: 10px; background: #f8fafc; border-radius: 6px;">
+                            <div><code>/help</code> - Show this help</div>
+                            <div><code>/modes</code> - List all modes</div>
+                            <div><code>/status</code> - System status</div>
+                            <div><code>/clear</code> - Clear chat</div>
+                        </div>
+
+                        <p style="margin-top: 12px; color: #64748b; font-size: 12px;">
+                            <i class="bi bi-lightbulb"></i> Tip: Click any command to fill it in the input box.
+                        </p>
+                    </div>
+                </div>
+            `;
+
+            const messagesDiv = document.getElementById('chatMessages');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = helpHtml;
+            messagesDiv.appendChild(tempDiv.firstElementChild);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Handle local commands (don't send to server)
+        function handleLocalCommand(command, args) {
+            switch(command) {
+                case 'help':
+                    showHelp();
+                    return true;
+                case 'modes':
+                    showModes();
+                    return true;
+                case 'status':
+                    loadSystemStatus();
+                    addMessage('assistant', '<div class="finding info"><div class="finding-severity">Info</div>System status refreshed. Check sidebar for details.</div>');
+                    return true;
+                case 'clear':
+                    document.getElementById('chatMessages').innerHTML = '';
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        function showModes() {
+            const modesHtml = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        <h3><i class="bi bi-grid"></i> Available Intent Modes</h3>
+                        ${Object.entries(MODE_CONFIG).map(([key, config]) => `
+                            <div style="margin: 8px 0; padding: 10px; background: ${key === currentMode ? '#0891b2' : '#f8fafc'};
+                                        color: ${key === currentMode ? 'white' : 'inherit'}; border-radius: 8px; cursor: pointer;"
+                                 onclick="switchMode('${key}')">
+                                <strong>${config.name}</strong> ${key === currentMode ? '(active)' : ''}
+                                <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
+                                    Commands: ${config.commands.map(c => c.cmd).join(', ')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            const messagesDiv = document.getElementById('chatMessages');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = modesHtml;
+            messagesDiv.appendChild(tempDiv.firstElementChild);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-option').forEach(o => {
+                o.classList.toggle('active', o.dataset.mode === mode);
+            });
+            document.getElementById('currentMode').textContent = mode;
+            updateUIForMode(mode);
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const query = input.value.trim();
+
+            if (!query || isProcessing) return;
+
+            // Parse for slash commands
+            const parsed = parseCommand(query);
+
+            // Handle local commands (don't send to server)
+            if (parsed.isCommand && handleLocalCommand(parsed.command, parsed.args)) {
+                addMessage('user', query);
+                input.value = '';
+                input.style.height = 'auto';
+                return;
+            }
+
+            isProcessing = true;
+            updateStatus('processing');
+            document.getElementById('sendBtn').disabled = true;
+
+            // Add user message
+            addMessage('user', query);
+            input.value = '';
+            input.style.height = 'auto';
+
+            // Add loading indicator
+            const loadingId = addLoading();
+
+            try {
+
+                const requestBody = {
+                    query: parsed.isCommand ? parsed.args || parsed.command : query,
+                    context: {
+                        mode: currentMode,
+                        intentMode: currentMode,
+                        // Include command info if slash command
+                        ...(parsed.isCommand && {
+                            command: parsed.command,
+                            commandArgs: parsed.args,
+                            taskType: mapCommandToTaskType(parsed.command)
+                        })
+                    }
+                };
+
+                console.log('Sending request:', requestBody);
+
+                const response = await fetch('/api/healthcare/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                removeLoading(loadingId);
+
+                if (data.success !== false) {
+                    addAssistantMessage(data);
+                } else {
+                    addMessage('assistant', `<div class="finding critical"><div class="finding-severity">Error</div>${data.error || data.summary || 'An error occurred'}</div>`);
+                }
+            } catch (error) {
+                removeLoading(loadingId);
+                addMessage('assistant', `<div class="finding critical"><div class="finding-severity">Error</div>${error.message}</div>`);
+            }
+
+            isProcessing = false;
+            updateStatus('ready');
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        // Map slash commands to task types for backend routing
+        function mapCommandToTaskType(command) {
+            const commandMap = {
+                // Clinical Decision Support
+                'patient': 'patient_summary',
+                'drug-check': 'drug_interaction_check',
+                'lab-interpret': 'lab_interpretation',
+                'diagnosis': 'diagnosis_coding',
+                'treatment': 'treatment_recommendation',
+                'care-gaps': 'care_gap_analysis',
+
+                // PHI Protection
+                'phi-audit': 'phi_audit',
+                'phi-scan': 'phi_scan',
+                'access-log': 'access_review',
+                'data-classify': 'data_classification',
+                'redact-check': 'redaction_check',
+                'encryption-status': 'encryption_status',
+
+                // Compliance Audit
+                'hipaa-check': 'hipaa_compliance',
+                'audit-report': 'compliance_report',
+                'consent-verify': 'consent_verification',
+                'breach-risk': 'breach_risk_assessment',
+                'policy-violations': 'policy_violations',
+                'access-audit': 'access_audit',
+
+                // Emergency Triage
+                'triage': 'triage_assessment',
+                'critical-alert': 'critical_alerts',
+                'allergy-check': 'allergy_check',
+                'protocol': 'emergency_protocol',
+                'vitals-trend': 'vitals_trend',
+                'code-team': 'code_team_status'
+            };
+            return commandMap[command] || 'general_query';
+        }
+
+        function addMessage(type, content) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.innerHTML = content;
+
+            messageDiv.appendChild(bubble);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function addAssistantMessage(data) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+
+            let html = '<div class="message-bubble">';
+
+            // Summary
+            if (data.data?.summary || data.summary) {
+                html += `<h2>${data.data?.summary || data.summary}</h2>`;
+            }
+
+            // Compliance status
+            if (data.compliance_status) {
+                html += `<span class="compliance-badge ${data.compliance_status}">${data.compliance_status.replace('_', ' ').toUpperCase()}</span>`;
+            }
+
+            // Root cause
+            if (data.data?.root_cause) {
+                html += `<h3>Root Cause</h3><p>${data.data.root_cause}</p>`;
+            }
+
+            // Confidence
+            if (data.data?.confidence) {
+                html += `<p><strong>Confidence:</strong> ${Math.round(data.data.confidence * 100)}%</p>`;
+            }
+
+            // Findings
+            if (data.data?.findings?.length > 0) {
+                html += '<h3>Findings</h3>';
+                data.data.findings.forEach(f => {
+                    html += `<div class="finding ${f.severity}">
+                        <div class="finding-severity">${f.severity}</div>
+                        ${f.message}
+                        ${f.evidence ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Evidence: ${f.evidence}</div>` : ''}
+                    </div>`;
+                });
+            }
+
+            // Recommended actions
+            if (data.suggested_actions?.length > 0) {
+                html += '<h3>Recommended Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    const riskClass = a.risk_score > 5 ? 'risk-high' : '';
+                    html += `<button class="action-btn ${riskClass}" onclick="executeAction('${a.action}', '${a.target || ''}')">
+                        ${a.action}
+                        ${a.risk_score ? `<span class="risk-badge">Risk: ${a.risk_score}/10</span>` : ''}
+                    </button>`;
+                });
+                html += '</div>';
+            }
+
+            // Reasoning chain
+            if (data.reasoning?.length > 0) {
+                const reasoningId = 'reasoning-' + Date.now();
+                html += `<button class="reasoning-toggle" onclick="toggleReasoning('${reasoningId}')">
+                    <i class="bi bi-diagram-3"></i> Show Reasoning (${data.reasoning.length} steps)
+                </button>`;
+                html += `<div class="reasoning-chain" id="${reasoningId}">`;
+                data.reasoning.forEach(r => {
+                    html += `<div class="reasoning-step">
+                        <strong>${r.step}</strong><br>
+                        ${r.thought ? `Thought: ${r.thought}<br>` : ''}
+                        ${r.action ? `Action: ${r.action}<br>` : ''}
+                        ${r.observation ? `Observation: ${r.observation}` : ''}
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            // Fallback to markdown
+            if (data.markdown && !data.data?.summary) {
+                html += marked.parse(data.markdown);
+            }
+
+            html += '</div>';
+            messageDiv.innerHTML = html;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function addLoading() {
+            const messagesDiv = document.getElementById('chatMessages');
+            const id = 'loading-' + Date.now();
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = id;
+            loadingDiv.className = 'message assistant';
+            loadingDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                    Analyzing...
+                </div>
+            `;
+            messagesDiv.appendChild(loadingDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return id;
+        }
+
+        function removeLoading(id) {
+            const loading = document.getElementById(id);
+            if (loading) loading.remove();
+        }
+
+        function toggleReasoning(id) {
+            const chain = document.getElementById(id);
+            chain.classList.toggle('show');
+        }
+
+        async function executeAction(action, target) {
+            if (!confirm(`Execute action: ${action}${target ? ' on ' + target : ''}?`)) return;
+
+            // First assess risk
+            try {
+                const riskResponse = await fetch('/api/healthcare/policy/evaluate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task: { type: action, target },
+                        context: { mode: currentMode }
+                    })
+                });
+
+                const riskData = await riskResponse.json();
+
+                if (!riskData.validation?.allowed) {
+                    alert('Action blocked by policy: ' + (riskData.validation?.violations?.map(v => v.message).join(', ') || 'Unknown reason'));
+                    return;
+                }
+
+                addMessage('assistant', `<div class="finding info"><div class="finding-severity">Info</div>Action "${action}" would be executed. (Demo mode - no actual execution)</div>`);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

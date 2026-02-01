@@ -1,0 +1,12 @@
+{
+  "description": "Additional organizations to register on startup (beyond the one in .env)",
+  "orgs": [
+    {
+      "orgId": "00Dcf000002TDjzEAG",
+      "name": "FULL",
+      "customerName": "CSCSW",
+      "type": "sandbox",
+      "isActive": true
+    }
+  ]
+}

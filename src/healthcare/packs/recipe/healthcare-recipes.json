@@ -1,0 +1,283 @@
+{
+  "name": "healthcare-core",
+  "version": "1.0.0",
+  "description": "Core healthcare recipes - Graph/Cache for data, LLM only for reasoning",
+  "metadata": {
+    "author": "Metalligent Healthcare",
+    "domain": "healthcare"
+  },
+  "recipes": [
+    {
+      "name": "phi-field-audit",
+      "taskType": "phi_audit",
+      "intentMode": "PHI_PROTECTION",
+      "description": "Audit all PHI fields and their access patterns",
+      "inputs": ["orgId"],
+      "outputs": ["phiFields", "accessPatterns", "riskAssessment"],
+      "steps": [
+        {
+          "name": "identify-phi-fields",
+          "type": "query",
+          "query": "g.V().hasLabel('Field').has('sensitivity', 'PHI')",
+          "outputKey": "phiFields"
+        },
+        {
+          "name": "find-access-patterns",
+          "type": "query",
+          "query": "g.V().hasLabel('Field').has('sensitivity', 'PHI').inE('READS_FIELD', 'WRITES_FIELD', 'DISPLAYS').outV().path()",
+          "outputKey": "accessPaths"
+        },
+        {
+          "name": "analyze-access",
+          "type": "analyze",
+          "input": "$accessPaths",
+          "analyzeFields": ["label", "type"],
+          "outputKey": "accessAnalysis"
+        },
+        {
+          "name": "assess-risk",
+          "type": "transform",
+          "input": "$phiFields",
+          "operations": [
+            {
+              "type": "map",
+              "mapping": {
+                "fieldId": "$id",
+                "fieldName": "$apiName",
+                "classification": "$phiClassification",
+                "riskLevel": "high"
+              }
+            }
+          ],
+          "outputKey": "riskAssessment"
+        }
+      ]
+    },
+    {
+      "name": "field-impact-analysis",
+      "taskType": "impact_analysis",
+      "intentMode": "*",
+      "description": "Analyze impact of changing a field",
+      "inputs": ["fieldId", "changeType"],
+      "outputs": ["impactedFlows", "impactedClasses", "impactedLayouts", "riskScore"],
+      "steps": [
+        {
+          "name": "get-field",
+          "type": "query",
+          "query": "g.V('{{fieldId}}')",
+          "outputKey": "targetField"
+        },
+        {
+          "name": "find-reading-automation",
+          "type": "query",
+          "query": "g.V('{{fieldId}}').inE('READS_FIELD').outV()",
+          "outputKey": "readers"
+        },
+        {
+          "name": "find-writing-automation",
+          "type": "query",
+          "query": "g.V('{{fieldId}}').inE('WRITES_FIELD').outV()",
+          "outputKey": "writers"
+        },
+        {
+          "name": "find-displays",
+          "type": "query",
+          "query": "g.V('{{fieldId}}').inE('DISPLAYS').outV()",
+          "outputKey": "displays"
+        },
+        {
+          "name": "aggregate-impacts",
+          "type": "aggregate",
+          "inputs": ["$readers", "$writers", "$displays"],
+          "method": "concat",
+          "outputKey": "allImpacts"
+        },
+        {
+          "name": "analyze-impacts",
+          "type": "analyze",
+          "input": "$allImpacts",
+          "analyzeFields": ["label", "type", "status"],
+          "outputKey": "impactAnalysis"
+        }
+      ]
+    },
+    {
+      "name": "migration-readiness-check",
+      "taskType": "migration_assessment",
+      "intentMode": "MIGRATION_READINESS",
+      "description": "Assess readiness for healthcare data migration",
+      "inputs": ["sourceOrg", "targetOrg"],
+      "outputs": ["blockers", "warnings", "readinessScore"],
+      "steps": [
+        {
+          "name": "identify-phi-fields",
+          "type": "query",
+          "query": "g.V().hasLabel('Field').has('sensitivity', 'PHI')",
+          "outputKey": "phiFields"
+        },
+        {
+          "name": "check-phi-encryption",
+          "type": "validate",
+          "input": "$phiFields",
+          "rules": [
+            {
+              "name": "encryption-required",
+              "condition": { "encrypted": true },
+              "message": "PHI field must be encrypted for migration"
+            }
+          ],
+          "outputKey": "encryptionCheck"
+        },
+        {
+          "name": "find-custom-automation",
+          "type": "query",
+          "query": "g.V().hasLabel('ApexClass', 'Flow').has('status', 'Active')",
+          "outputKey": "activeAutomation"
+        },
+        {
+          "name": "validate-automation",
+          "type": "validate",
+          "input": "$activeAutomation",
+          "rules": [
+            {
+              "name": "has-test-coverage",
+              "condition": { "testCoverage": { "$gte": 75 } },
+              "message": "Automation must have 75%+ test coverage for migration"
+            }
+          ],
+          "outputKey": "automationCheck"
+        },
+        {
+          "name": "aggregate-blockers",
+          "type": "aggregate",
+          "inputs": ["$encryptionCheck.violations", "$automationCheck.violations"],
+          "method": "concat",
+          "outputKey": "blockers"
+        }
+      ]
+    },
+    {
+      "name": "clinical-hours-deployment-check",
+      "taskType": "deployment_validation",
+      "intentMode": "CLINICAL_HOURS",
+      "description": "Validate deployment is safe during clinical hours",
+      "inputs": ["deploymentManifest"],
+      "outputs": ["allowed", "blockedItems", "deferredItems"],
+      "steps": [
+        {
+          "name": "categorize-changes",
+          "type": "transform",
+          "input": "$deploymentManifest",
+          "operations": [
+            {
+              "type": "group",
+              "field": "type"
+            }
+          ],
+          "outputKey": "categorizedChanges"
+        },
+        {
+          "name": "validate-schema-changes",
+          "type": "validate",
+          "input": "$categorizedChanges.schema",
+          "rules": [
+            {
+              "name": "no-schema-in-clinical",
+              "condition": { "$exists": false },
+              "message": "Schema changes blocked during clinical hours"
+            }
+          ],
+          "outputKey": "schemaValidation"
+        },
+        {
+          "name": "validate-automation-changes",
+          "type": "validate",
+          "input": "$categorizedChanges.automation",
+          "rules": [
+            {
+              "name": "no-phi-automation-in-clinical",
+              "condition": { "touchesPHI": { "$ne": true } },
+              "message": "PHI automation changes blocked during clinical hours"
+            }
+          ],
+          "outputKey": "automationValidation"
+        }
+      ]
+    },
+    {
+      "name": "compliance-audit-report",
+      "taskType": "compliance_report",
+      "intentMode": "COMPLIANCE_AUDIT",
+      "description": "Generate HIPAA compliance audit report",
+      "inputs": ["auditPeriodStart", "auditPeriodEnd"],
+      "outputs": ["phiAccessLog", "policyViolations", "complianceScore"],
+      "steps": [
+        {
+          "name": "get-phi-fields",
+          "type": "query",
+          "query": "g.V().hasLabel('Field').has('sensitivity', 'PHI').valueMap(true)",
+          "outputKey": "phiFields"
+        },
+        {
+          "name": "get-audit-entries",
+          "type": "query",
+          "query": "g.V().hasLabel('AuditEntry').has('timestamp', gte('{{auditPeriodStart}}')).has('timestamp', lte('{{auditPeriodEnd}}'))",
+          "outputKey": "auditEntries"
+        },
+        {
+          "name": "get-decision-artifacts",
+          "type": "query",
+          "query": "g.V().hasLabel('DecisionArtifact').has('timestamp', gte('{{auditPeriodStart}}')).has('timestamp', lte('{{auditPeriodEnd}}'))",
+          "outputKey": "decisions"
+        },
+        {
+          "name": "analyze-compliance",
+          "type": "analyze",
+          "input": "$decisions",
+          "analyzeFields": ["outcome", "category", "intentMode"],
+          "outputKey": "complianceAnalysis"
+        }
+      ]
+    },
+    {
+      "name": "automation-phi-scan",
+      "taskType": "phi_scan",
+      "intentMode": "GUARDRAIL_ENFORCEMENT",
+      "description": "Scan automation for PHI handling",
+      "inputs": ["automationType"],
+      "outputs": ["automationWithPHI", "recommendations"],
+      "steps": [
+        {
+          "name": "get-automation",
+          "type": "query",
+          "query": "g.V().hasLabel('{{automationType}}')",
+          "outputKey": "automation"
+        },
+        {
+          "name": "find-phi-connections",
+          "type": "query",
+          "query": "g.V().hasLabel('{{automationType}}').outE('READS_FIELD', 'WRITES_FIELD').inV().has('sensitivity', 'PHI').path()",
+          "outputKey": "phiConnections"
+        },
+        {
+          "name": "transform-results",
+          "type": "transform",
+          "input": "$phiConnections",
+          "operations": [
+            {
+              "type": "map",
+              "mapping": {
+                "automationId": "$path[0].id",
+                "automationName": "$path[0].name",
+                "operation": "$path[1].label",
+                "phiField": "$path[2].apiName",
+                "phiClassification": "$path[2].phiClassification"
+              }
+            }
+          ],
+          "outputKey": "automationWithPHI"
+        }
+      ]
+    }
+  ]
+}
