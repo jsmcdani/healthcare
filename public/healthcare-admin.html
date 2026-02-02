@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare Platform Administration - Metalligent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1a472a 0%, #2d5a3a 50%, #134e4a 100%);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            height: calc(100% - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            color: #1a472a;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .header .subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            background: #48bb78;
+            color: white;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-badge.offline {
+            background: #f56565;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .stat-card.phi {
+            border-left: 4px solid #f56565;
+        }
+
+        .stat-card.policy {
+            border-left: 4px solid #ecc94b;
+        }
+
+        .stat-card.graph {
+            border-left: 4px solid #4299e1;
+        }
+
+        .stat-card.knowledge {
+            border-left: 4px solid #9f7aea;
+        }
+
+        .stat-card.tools {
+            border-left: 4px solid #48bb78;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #718096;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 16px;
+            color: #2d3748;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tool-category {
+            margin-bottom: 20px;
+        }
+
+        .tool-category h3 {
+            font-size: 12px;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-category h3 .icon {
+            font-size: 14px;
+        }
+
+        .tool-list {
+            list-style: none;
+        }
+
+        .tool-item {
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: #f7fafc;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 12px;
+            color: #4a5568;
+        }
+
+        .tool-item:hover {
+            background: #1a472a;
+            color: white;
+            transform: translateX(4px);
+        }
+
+        .chat-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #1a472a 0%, #2d5a3a 100%);
+            color: white;
+        }
+
+        .chat-header h2 {
+            font-size: 18px;
+        }
+
+        .chat-header .hipaa-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f7fafc;
+            min-height: 0;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .message.user .message-avatar {
+            background: #1a472a;
+        }
+
+        .message.assistant .message-avatar {
+            background: #48bb78;
+        }
+
+        .message-content {
+            max-width: 70%;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #1a472a;
+            color: white;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+
+        .message.user .message-time {
+            color: rgba(255,255,255,0.8);
+        }
+
+        .tools-used {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 8px;
+            padding: 8px;
+            background: #edf2f7;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .chat-input-container {
+            padding: 16px 20px;
+            border-top: 2px solid #e2e8f0;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        .quick-commands {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .quick-command {
+            padding: 6px 12px;
+            background: #e6fffa;
+            border: 1px solid #38b2ac;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #234e52;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-command:hover {
+            background: #1a472a;
+            border-color: #1a472a;
+            color: white;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            border-color: #1a472a;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: #1a472a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .send-button:hover {
+            background: #2d5a3a;
+            transform: translateY(-1px);
+        }
+
+        .send-button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 16px;
+            color: #718096;
+            flex-shrink: 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #1a472a;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-hint {
+            font-size: 14px;
+            color: #cbd5e0;
+        }
+
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin: 8px 0;
+        }
+    </style>
+    <script src="/js/nav-header.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Healthcare Platform Administration</h1>
+                <div class="subtitle">HIPAA-Compliant Admin Agent - PHI Protection, Policy Engine, Clinical Knowledge</div>
+            </div>
+            <div>
+                <span class="status-badge" id="statusBadge">Agent Ready</span>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card phi">
+                <div class="stat-value" id="phiTools">5</div>
+                <div class="stat-label">PHI Protection Tools</div>
+            </div>
+            <div class="stat-card policy">
+                <div class="stat-value" id="policyTools">4</div>
+                <div class="stat-label">Policy Engine Tools</div>
+            </div>
+            <div class="stat-card graph">
+                <div class="stat-value" id="graphTools">5</div>
+                <div class="stat-label">Gremlin Graph Tools</div>
+            </div>
+            <div class="stat-card knowledge">
+                <div class="stat-value" id="knowledgeTools">4</div>
+                <div class="stat-label">Clinical Knowledge Tools</div>
+            </div>
+            <div class="stat-card tools">
+                <div class="stat-value" id="totalTools">143</div>
+                <div class="stat-label">Total Admin Tools</div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="sidebar">
+                <h2>Healthcare Admin Tools</h2>
+
+                <div class="tool-category">
+                    <h3><span class="icon">🔒</span> PHI Protection</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('Audit PHI access for the last 24 hours')">Audit PHI Access</li>
+                        <li class="tool-item" onclick="insertCommand('Detect PHI in field names: SSN__c, DateOfBirth, PatientMRN')">Detect PHI Fields</li>
+                        <li class="tool-item" onclick="insertCommand('Configure PHI masking for SSN fields')">Configure Masking</li>
+                        <li class="tool-item" onclick="insertCommand('Generate PHI exposure report')">PHI Exposure Report</li>
+                        <li class="tool-item" onclick="insertCommand('Update PHI classification for field')">Update Classification</li>
+                    </ul>
+                </div>
+
+                <div class="tool-category">
+                    <h3><span class="icon">📋</span> Policy Engine</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('List all healthcare policies')">List Policies</li>
+                        <li class="tool-item" onclick="insertCommand('Create new policy for PHI access')">Create Policy</li>
+                        <li class="tool-item" onclick="insertCommand('Evaluate policy for data export scenario')">Evaluate Policy</li>
+                        <li class="tool-item" onclick="insertCommand('Show recent policy violations')">Policy Violations</li>
+                    </ul>
+                </div>
+
+                <div class="tool-category">
+                    <h3><span class="icon">🧠</span> Clinical Knowledge</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('Query clinical guidelines for diabetes management')">Query Guidelines</li>
+                        <li class="tool-item" onclick="insertCommand('Check drug interactions between aspirin and warfarin')">Drug Interactions</li>
+                        <li class="tool-item" onclick="insertCommand('List knowledge sources and freshness')">Knowledge Sources</li>
+                        <li class="tool-item" onclick="insertCommand('Update knowledge entry')">Update Knowledge</li>
+                    </ul>
+                </div>
+
+                <div class="tool-category">
+                    <h3><span class="icon">🎯</span> Intent Modes</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('List all intent modes')">List Modes</li>
+                        <li class="tool-item" onclick="insertCommand('Get current intent mode')">Current Mode</li>
+                        <li class="tool-item" onclick="insertCommand('Switch to PHI_PROTECTION mode with justification')">Switch Mode</li>
+                        <li class="tool-item" onclick="insertCommand('Configure mode rules')">Configure Rules</li>
+                    </ul>
+                </div>
+
+                <div class="tool-category">
+                    <h3><span class="icon">📊</span> Cosmos DB Graph</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('Get graph statistics')">Graph Stats</li>
+                        <li class="tool-item" onclick="insertCommand('Find automations accessing PHI fields')">PHI Automations</li>
+                        <li class="tool-item" onclick="insertCommand('Get field access paths for PatientSSN')">Field Access Paths</li>
+                        <li class="tool-item" onclick="insertCommand('Validate graph schema')">Validate Schema</li>
+                        <li class="tool-item" onclick="insertCommand('Visualize schema in mermaid format')">Visualize Schema</li>
+                    </ul>
+                </div>
+
+                <div class="tool-category">
+                    <h3><span class="icon">⚙️</span> System Admin</h3>
+                    <ul class="tool-list">
+                        <li class="tool-item" onclick="insertCommand('Get system health')">System Health</li>
+                        <li class="tool-item" onclick="insertCommand('List feature flags')">Feature Flags</li>
+                        <li class="tool-item" onclick="insertCommand('Get LLM cost summary')">LLM Costs</li>
+                        <li class="tool-item" onclick="insertCommand('Get cache health')">Cache Health</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="chat-panel">
+                <div class="chat-header">
+                    <h2>Healthcare Admin Control Plane</h2>
+                    <span class="hipaa-badge">HIPAA Compliant</span>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🏥</div>
+                        <div class="empty-state-text">HIPAA-Compliant Platform Administration</div>
+                        <div class="empty-state-hint">Try: "List intent modes" or "Audit PHI access" or "Validate graph schema"</div>
+                    </div>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <div>Healthcare Admin Agent is processing...</div>
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="quick-commands">
+                        <button class="quick-command" onclick="sendQuickCommand('List intent modes')">Intent Modes</button>
+                        <button class="quick-command" onclick="sendQuickCommand('Audit PHI access')">PHI Audit</button>
+                        <button class="quick-command" onclick="sendQuickCommand('Get graph statistics')">Graph Stats</button>
+                        <button class="quick-command" onclick="sendQuickCommand('List policies')">Policies</button>
+                        <button class="quick-command" onclick="sendQuickCommand('Get system health')">Health</button>
+                        <button class="quick-command" onclick="sendQuickCommand('Visualize schema in mermaid format')">Schema</button>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <input
+                            type="text"
+                            class="chat-input"
+                            id="chatInput"
+                            placeholder="Ask about PHI protection, policies, clinical knowledge, or graph data..."
+                            onkeypress="handleKeyPress(event)"
+                        >
+                        <button class="send-button" id="sendButton" onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let conversationId = null;
+        let messageCount = 0;
+        let currentUser = null;
+
+        // Check authentication on load
+        (async function checkAuth() {
+            try {
+                const response = await fetch('/api/healthcare/auth/session');
+                const data = await response.json();
+
+                if (!data.valid || !data.session) {
+                    window.location.href = '/healthcare-login.html?redirect=/healthcare-admin.html';
+                    return;
+                }
+
+                currentUser = data.session;
+
+                // Check for admin/auditor role
+                if (!['admin', 'auditor'].includes(currentUser.role)) {
+                    alert('Access denied. Admin or Auditor role required.');
+                    window.location.href = '/healthcare-assistant.html';
+                    return;
+                }
+
+                // Update UI with user info
+                updateUserDisplay();
+
+                // Now initialize the rest
+                checkAgentStatus();
+                loadToolCounts();
+                document.getElementById('chatInput').focus();
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/healthcare-login.html?redirect=/healthcare-admin.html';
+            }
+        })();
+
+        function updateUserDisplay() {
+            if (!currentUser) return;
+
+            const headerRight = document.querySelector('.header > div:last-child');
+            const userBadge = document.createElement('div');
+            userBadge.style.cssText = 'display: inline-flex; align-items: center; gap: 12px; margin-right: 12px;';
+            userBadge.innerHTML = `
+                <a href="/healthcare-assistant.html" style="color: #1a472a; text-decoration: none; padding: 6px 12px; background: #e2e8f0; border-radius: 6px; font-size: 12px; margin-right: 8px;">
+                    Back to Assistant
+                </a>
+                <span style="font-size: 14px; color: #4a5568;">
+                    <strong>${currentUser.name}</strong>
+                    <span style="background: #1a472a; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px; text-transform: uppercase;">${currentUser.role}</span>
+                </span>
+                <button onclick="logout()" style="background: #e53e3e; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                    Sign Out
+                </button>
+            `;
+            headerRight.insertBefore(userBadge, headerRight.firstChild);
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/healthcare/auth/logout', { method: 'POST' });
+            } catch (e) {
+                // Ignore
+            }
+            window.location.href = '/healthcare-login.html';
+        }
+
+        function formatTime() {
+            return new Date().toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function addMessage(role, content, toolsUsed = []) {
+            const messagesDiv = document.getElementById('chatMessages');
+
+            const emptyState = messagesDiv.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = role === 'user' ? 'U' : '🏥';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            let formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+
+            contentDiv.innerHTML = formattedContent;
+
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = formatTime();
+
+            contentDiv.appendChild(timeDiv);
+
+            if (toolsUsed && toolsUsed.length > 0) {
+                const toolsDiv = document.createElement('div');
+                toolsDiv.className = 'tools-used';
+                toolsDiv.textContent = `Tools: ${toolsUsed.map(t => t.name).join(', ')}`;
+                contentDiv.appendChild(toolsDiv);
+            }
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(messageDiv);
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            addMessage('user', message);
+            input.value = '';
+
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('loading').classList.add('active');
+
+            try {
+                const response = await fetch('/api/healthcare/admin/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': 'admin@healthcare.com',
+                        'X-User-Role': 'admin'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversationId: conversationId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    conversationId = data.conversationId;
+                    addMessage('assistant', data.response, data.toolsUsed);
+                } else {
+                    addMessage('assistant', `Error: ${data.error}`);
+                }
+
+            } catch (error) {
+                addMessage('assistant', `Connection error: ${error.message}`);
+            } finally {
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('loading').classList.remove('active');
+                input.focus();
+            }
+        }
+
+        function sendQuickCommand(command) {
+            document.getElementById('chatInput').value = command;
+            sendMessage();
+        }
+
+        function insertCommand(command) {
+            document.getElementById('chatInput').value = command;
+            document.getElementById('chatInput').focus();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function checkAgentStatus() {
+            try {
+                const response = await fetch('/api/healthcare/admin/status');
+                const data = await response.json();
+
+                const badge = document.getElementById('statusBadge');
+                if (data.success && data.initialized) {
+                    badge.textContent = 'Agent Ready';
+                    badge.classList.remove('offline');
+                } else {
+                    badge.textContent = 'Initializing...';
+                    // Try to initialize
+                    await fetch('/api/healthcare/admin/init', { method: 'POST' });
+                    badge.textContent = 'Agent Ready';
+                    badge.classList.remove('offline');
+                }
+            } catch (error) {
+                const badge = document.getElementById('statusBadge');
+                badge.textContent = 'Agent Offline';
+                badge.classList.add('offline');
+            }
+        }
+
+        async function loadToolCounts() {
+            try {
+                const response = await fetch('/api/healthcare/admin/tools', {
+                    headers: { 'X-User-Role': 'admin' }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('totalTools').textContent = data.totalTools;
+                    document.getElementById('phiTools').textContent =
+                        data.categories.healthcare.filter(t => t.includes('phi')).length;
+                    document.getElementById('policyTools').textContent =
+                        data.categories.healthcare.filter(t => t.includes('policy')).length;
+                    document.getElementById('graphTools').textContent =
+                        data.categories.healthcare.filter(t => t.includes('gremlin') || t.includes('schema')).length;
+                    document.getElementById('knowledgeTools').textContent =
+                        data.categories.healthcare.filter(t => t.includes('knowledge') || t.includes('clinical') || t.includes('drug')).length;
+                }
+            } catch (e) {
+                console.log('Could not load tool counts');
+            }
+        }
+
+        // Note: Initialization happens in checkAuth() after successful authentication
+    </script>
+</body>
+</html>

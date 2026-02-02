@@ -509,6 +509,63 @@
             background: #fef3c7;
             color: #92400e;
         }
+
+        /* User Badge */
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.15);
+            padding: 6px 12px;
+            border-radius: 8px;
+            margin-right: 12px;
+        }
+
+        .user-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .user-role {
+            font-size: 10px;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 4px;
+            margin-left: 4px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .logout-btn:hover {
+            opacity: 1;
+        }
+
+        .admin-link {
+            color: white;
+            padding: 4px 8px;
+            margin-left: 8px;
+            opacity: 0.7;
+            transition: all 0.2s;
+            text-decoration: none;
+            background: rgba(255,255,255,0.15);
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .admin-link:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.25);
+        }
     </style>
 </head>
 <body>
@@ -695,13 +752,77 @@
             }
         };
 
+        // Current user session
+        let currentUser = null;
+
         // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check authentication first
+            const isAuthenticated = await checkAuth();
+            if (!isAuthenticated) {
+                window.location.href = '/healthcare-login.html?redirect=/healthcare-assistant.html';
+                return;
+            }
+
             loadSystemStatus();
             setupModeSelector();
             autoResizeTextarea();
             updateUIForMode(currentMode);
         });
+
+        // Check if user is authenticated
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/healthcare/auth/session');
+                const data = await response.json();
+
+                if (data.valid && data.session) {
+                    currentUser = data.session;
+                    updateUserDisplay();
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                return false;
+            }
+        }
+
+        // Update user display in header
+        function updateUserDisplay() {
+            if (!currentUser) return;
+
+            const headerControls = document.querySelector('.header-controls');
+            const userBadge = document.createElement('div');
+            userBadge.className = 'user-badge';
+
+            // Add admin panel link for admin/auditor users
+            const adminLink = ['admin', 'auditor'].includes(currentUser.role)
+                ? `<a href="/healthcare-admin.html" class="admin-link" title="Admin Panel">
+                    <i class="bi bi-shield-lock"></i>
+                   </a>`
+                : '';
+
+            userBadge.innerHTML = `
+                <span class="user-name">${currentUser.name}</span>
+                <span class="user-role">${currentUser.role}</span>
+                ${adminLink}
+                <button class="logout-btn" onclick="logout()" title="Sign out">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            `;
+            headerControls.insertBefore(userBadge, headerControls.firstChild);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                await fetch('/api/healthcare/auth/logout', { method: 'POST' });
+            } catch (e) {
+                // Ignore errors
+            }
+            window.location.href = '/healthcare-login.html';
+        }
 
         function setupModeSelector() {
             document.querySelectorAll('.mode-option').forEach(option => {
