@@ -2,6 +2,7 @@
  * Envelope Schemas Index
  *
  * Export all envelope types for convenient importing.
+ * No lazy registration - schemas are pure definitions.
  */
 
 // Step envelopes
@@ -59,30 +60,5 @@ export {
   createContractError,
   createPolicyError,
   createStepError,
-  validateErrorEnvelope,
-  registerErrorSchema
+  validateErrorEnvelope
 } from './ErrorEnvelope.js';
-
-// Export all register functions for lazy initialization
-export { registerStepInputSchema } from './StepInputEnvelope.js';
-export { registerStepOutputSchema } from './StepOutputEnvelope.js';
-export { registerRequestSchema } from './RequestEnvelope.js';
-export { registerResponseSchema } from './ResponseEnvelope.js';
-
-/**
- * Register all envelope schemas in the registry
- * Call this after all modules are loaded to avoid circular deps
- */
-export async function registerAllEnvelopeSchemas() {
-  const stepInput = await import('./StepInputEnvelope.js');
-  const stepOutput = await import('./StepOutputEnvelope.js');
-  const error = await import('./ErrorEnvelope.js');
-  const request = await import('./RequestEnvelope.js');
-  const response = await import('./ResponseEnvelope.js');
-
-  stepInput.registerStepInputSchema();
-  stepOutput.registerStepOutputSchema();
-  error.registerErrorSchema();
-  request.registerRequestSchema();
-  response.registerResponseSchema();
-}

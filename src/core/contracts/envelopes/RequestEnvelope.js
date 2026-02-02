@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import { EnvelopeHeaderSchema, createEnvelopeHeader } from '../EnvelopeHeader.js';
-import { registerSchema, SchemaIds } from '../registry.js';
+import { SchemaIds } from '../schema-ids.js';
 
 /**
  * Request context from API layer
@@ -94,17 +94,6 @@ export function createRequestEnvelope(req, options = {}) {
  */
 export function validateRequest(envelope) {
   return RequestEnvelopeSchema.safeParse(envelope);
-}
-
-/**
- * Register the schema (call after module fully loaded)
- */
-export function registerRequestSchema() {
-  try {
-    registerSchema(SchemaIds.REQUEST, '1.0.0', RequestEnvelopeSchema);
-  } catch (e) {
-    // Already registered
-  }
 }
 
 export default RequestEnvelopeSchema;

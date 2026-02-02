@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { EnvelopeHeaderSchema, createEnvelopeHeader } from '../EnvelopeHeader.js';
-import { registerSchema, SchemaIds } from '../registry.js';
+import { SchemaIds } from '../schema-ids.js';
 
 /**
  * Step execution status
@@ -158,17 +158,6 @@ export function createFailureOutput(stepId, stepType, error, metrics = {}) {
       retryCount: metrics.retryCount || 0
     }
   });
-}
-
-/**
- * Register the schema (call after module fully loaded)
- */
-export function registerStepOutputSchema() {
-  try {
-    registerSchema(SchemaIds.STEP_OUTPUT, '1.0.0', StepOutputEnvelopeSchema);
-  } catch (e) {
-    // Already registered
-  }
 }
 
 export default StepOutputEnvelopeSchema;

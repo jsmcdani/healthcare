@@ -268,33 +268,8 @@ export function getRegisteredSchema(schemaId, version = null) {
   return getSchemaRegistry().getSchema(schemaId, version);
 }
 
-/**
- * Standard schema ID patterns
- */
-export const SchemaIds = {
-  // Envelopes
-  STEP_INPUT: 'envelope.step.input',
-  STEP_OUTPUT: 'envelope.step.output',
-  REQUEST: 'envelope.api.request',
-  RESPONSE: 'envelope.api.response',
-  ERROR: 'envelope.error',
-
-  // Artifacts
-  ARTIFACT_BASE: 'artifact.base',
-  ARTIFACT_PROFILE: 'artifact.profile',
-  ARTIFACT_PACK: 'artifact.pack',
-  ARTIFACT_PROPOSAL: 'artifact.proposal',
-
-  // Packs
-  PACK_HOTSPOT: 'pack.hotspot',
-  PACK_COVERAGE: 'pack.coverage',
-  PACK_AFFINITY: 'pack.affinity',
-
-  // Publication
-  PUBLICATION_GATE: 'publication.gate',
-  APPROVAL_REQUEST: 'publication.approval.request',
-  APPROVAL_DECISION: 'publication.approval.decision'
-};
+// Re-export SchemaIds from dedicated file (breaks circular deps)
+export { SchemaIds } from './schema-ids.js';
 
 export { SchemaRegistry };
 export default getSchemaRegistry;

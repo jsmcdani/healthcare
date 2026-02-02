@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { EnvelopeHeaderSchema, createEnvelopeHeader } from '../EnvelopeHeader.js';
-import { registerSchema, SchemaIds } from '../registry.js';
+import { SchemaIds } from '../schema-ids.js';
 
 /**
  * Error severity levels
@@ -223,17 +223,6 @@ export function createStepError(stepId, recipeId, error, recoverable = false) {
  */
 export function validateErrorEnvelope(envelope) {
   return ErrorEnvelopeSchema.safeParse(envelope);
-}
-
-/**
- * Register the schema (call after module fully loaded)
- */
-export function registerErrorSchema() {
-  try {
-    registerSchema(SchemaIds.ERROR, '1.0.0', ErrorEnvelopeSchema);
-  } catch (e) {
-    // Already registered
-  }
 }
 
 export default ErrorEnvelopeSchema;

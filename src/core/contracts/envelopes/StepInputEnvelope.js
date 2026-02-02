@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import { EnvelopeHeaderSchema, createEnvelopeHeader } from '../EnvelopeHeader.js';
-import { registerSchema, SchemaIds } from '../registry.js';
+import { SchemaIds } from '../schema-ids.js';
 
 /**
  * Step input parameters - the actual data for the step
@@ -101,17 +101,6 @@ export function createStepInputEnvelope(options) {
  */
 export function validateStepInput(envelope) {
   return StepInputEnvelopeSchema.safeParse(envelope);
-}
-
-/**
- * Register the schema (call after module fully loaded)
- */
-export function registerStepInputSchema() {
-  try {
-    registerSchema(SchemaIds.STEP_INPUT, '1.0.0', StepInputEnvelopeSchema);
-  } catch (e) {
-    // Already registered
-  }
 }
 
 export default StepInputEnvelopeSchema;

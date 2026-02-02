@@ -2,10 +2,18 @@
  * Contracts Index - Export all contract infrastructure
  *
  * This is the main entry point for the contract-first architecture.
+ * Importing this module auto-bootstraps schema registration.
  *
  * Usage:
  * import { validate, EnvelopeHeaderSchema, createStepInputEnvelope } from './core/contracts';
  */
+
+// Bootstrap schemas on import (runs once)
+import { bootstrapContracts, isBootstrapped } from './bootstrap.js';
+bootstrapContracts();
+
+// Schema IDs (no deps - safe to import anywhere)
+export { SchemaIds } from './schema-ids.js';
 
 // Core header
 export {
@@ -34,7 +42,6 @@ export {
   getSchemaRegistry,
   registerSchema,
   getRegisteredSchema,
-  SchemaIds,
   SchemaRegistry
 } from './registry.js';
 
@@ -49,6 +56,9 @@ export {
   validateStepInput,
   validateStepOutput
 } from './ContractEnforcer.js';
+
+// Bootstrap utilities
+export { bootstrapContracts, isBootstrapped };
 
 /**
  * Contract enforcement modes

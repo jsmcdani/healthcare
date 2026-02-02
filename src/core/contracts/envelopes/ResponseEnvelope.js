@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import { EnvelopeHeaderSchema, createEnvelopeHeader } from '../EnvelopeHeader.js';
-import { registerSchema, SchemaIds } from '../registry.js';
+import { SchemaIds } from '../schema-ids.js';
 
 /**
  * Response status
@@ -172,17 +172,6 @@ export function createPartialResponse(data, warnings, options = {}) {
  */
 export function validateResponse(envelope) {
   return ResponseEnvelopeSchema.safeParse(envelope);
-}
-
-/**
- * Register the schema (call after module fully loaded)
- */
-export function registerResponseSchema() {
-  try {
-    registerSchema(SchemaIds.RESPONSE, '1.0.0', ResponseEnvelopeSchema);
-  } catch (e) {
-    // Already registered
-  }
 }
 
 export default ResponseEnvelopeSchema;
