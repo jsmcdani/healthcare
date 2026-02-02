@@ -75,6 +75,16 @@ export class HealthcareAdminAgent {
       // Load system prompt
       this.systemPrompt = await this.loadSystemPrompt();
 
+      // Connect Redis for LLM response caching
+      if (this.orchestrator?.redisClient) {
+        this.pool.setRedisClient(this.orchestrator.redisClient);
+      }
+
+      // Register on orchestrator so tools can access the pool
+      if (this.orchestrator) {
+        this.orchestrator.healthcareAdminAgent = this;
+      }
+
       this.logger.info('✅ Healthcare Admin Agent initialized successfully');
 
       return {
@@ -290,71 +300,29 @@ export class HealthcareAdminAgent {
   }
 
   /**
-   * Load available tools - Healthcare specific
+   * Load available tools - Healthcare specific only
    */
   async loadTools() {
-    // ========== GENERIC TOOLS (from Servient) ==========
-    const { featureFlagTools } = await import('../../admin/tools/feature-flag-tools.js');
-    const { userManagementTools } = await import('../../admin/tools/user-management-tools.js');
-    const { sessionAuditTools } = await import('../../admin/tools/session-audit-tools.js');
-    const { serviceConfigurationTools } = await import('../../admin/tools/service-configuration-tools.js');
-    const { promptManagementTools } = await import('../../admin/tools/prompt-management-tools.js');
-    const { llmConfigurationTools } = await import('../../admin/tools/llm-configuration-tools.js');
-    const { cachePolicyTools } = await import('../../admin/tools/cache-policy-tools.js');
-    const { databaseManagementTools } = await import('../../admin/tools/database-management-tools.js');
-    const { entityManagementTools } = await import('../../admin/tools/entity-management-tools.js');
-    const { recipeManagementTools } = await import('../../admin/tools/recipe-management-tools.js');
-    const { systemHealthTools } = await import('../../admin/tools/system-health-tools.js');
-    const { graphQueryTools } = await import('../../admin/tools/graph-query-tools.js');
-    const { jobQueueTools } = await import('../../admin/tools/job-queue-tools.js');
-    const { llmRecommendationTools } = await import('../../admin/tools/llm-recommendation-tools.js');
-    const { alertingTools } = await import('../../admin/tools/alerting-tools.js');
-    const { scheduledTaskTools } = await import('../../admin/tools/scheduled-task-tools.js');
-    const { costManagementTools } = await import('../../admin/tools/cost-management-tools.js');
-    const { complianceTools } = await import('../../admin/tools/compliance-tools.js');
-    const { cacheManagementTools } = await import('../../admin/tools/cache-management-tools.js');
-    const { schemaValidationTools } = await import('../../admin/tools/schema-validation-tools.js');
-
-    // ========== HEALTHCARE-SPECIFIC TOOLS ==========
+    // Healthcare-specific tools only
     const { cosmosGremlinTools } = await import('./tools/cosmos-gremlin-tools.js');
     const { phiProtectionTools } = await import('./tools/phi-protection-tools.js');
     const { policyEngineTools } = await import('./tools/policy-engine-tools.js');
     const { knowledgeEngineTools } = await import('./tools/knowledge-engine-tools.js');
     const { intentModeTools } = await import('./tools/intent-mode-tools.js');
     const { cosmosSchemaTools } = await import('./tools/cosmos-schema-tools.js');
+    const { healthcareCacheTools } = await import('./tools/cache-tools.js');
 
-    // Combine all tools
     const allTools = [
-      // Generic Admin Tools
-      ...featureFlagTools,
-      ...userManagementTools,
-      ...sessionAuditTools,
-      ...serviceConfigurationTools,
-      ...promptManagementTools,
-      ...llmConfigurationTools,
-      ...cachePolicyTools,
-      ...databaseManagementTools,
-      ...entityManagementTools,
-      ...recipeManagementTools,
-      ...systemHealthTools,
-      ...graphQueryTools,
-      ...jobQueueTools,
-      ...llmRecommendationTools,
-      ...alertingTools,
-      ...scheduledTaskTools,
-      ...costManagementTools,
-      ...complianceTools,
-      ...cacheManagementTools,
-      ...schemaValidationTools,
-      // Healthcare-Specific Tools
       ...cosmosGremlinTools,
       ...phiProtectionTools,
       ...policyEngineTools,
       ...knowledgeEngineTools,
       ...intentModeTools,
-      ...cosmosSchemaTools
+      ...cosmosSchemaTools,
+      ...healthcareCacheTools
     ];
 
+    this.logger.debug(`Loaded ${allTools.length} healthcare admin tools`);
     return allTools;
   }
 
@@ -412,11 +380,10 @@ You are the **platform administrator** - responsible for configuration, operatio
 - Manage PHI field classifications in graph
 - Audit automation access to sensitive data
 
-### 5. Standard Admin Operations
-- User and session management
-- Feature flag configuration
-- LLM settings and cost management
-- Cache policies and system health
+### 5. Schema Management
+- Visualize and document graph schema
+- Track vertex and edge types
+- Monitor schema evolution
 
 ## Safety Guidelines
 
@@ -467,14 +434,18 @@ You are the **platform administrator** - responsible for configuration, operatio
 - get_field_access_paths: Trace who reads/writes a field
 - audit_graph_permissions: Audit permission graph
 
-### Standard Admin Tools
-All standard tools from Servient platform:
-- Feature flags, users, sessions, security
-- LLM configuration and recommendations
-- Cache management and policies
-- Alerting and scheduled tasks
-- Cost management and compliance
-- Recipe management and system health
+### Cosmos Schema Tools (3 tools)
+- get_schema_overview: Get graph schema summary
+- visualize_schema: Generate schema visualization
+- get_vertex_details: Get details about a vertex type
+
+### Cache Management Tools (6 tools)
+- list_caches: List all caches and their status
+- clear_cache: Clear a specific cache or all caches (requires confirmation)
+- get_cache_stats: Get detailed cache statistics including hit rates
+- get_llm_cache_stats: Get LLM response cache stats (hit rate, savings)
+- clear_llm_cache: Clear LLM response cache for fresh AI responses
+- warm_cache: Pre-warm caches with common data
 
 ## Interaction Style
 

@@ -20,6 +20,16 @@ import { Logger } from '../../utils/logger.js';
 const router = express.Router();
 const logger = new Logger('HealthcareAPI');
 
+// Module-level orchestrator reference (set when routes are mounted)
+let moduleOrchestrator = null;
+
+/**
+ * Get orchestrator from module variable, router, or app.locals
+ */
+function getOrchestrator(req) {
+  return moduleOrchestrator || router.orchestrator || req?.app?.locals?.orchestrator;
+}
+
 // Healthcare stack instance (initialized on first request or via init endpoint)
 let healthcareStack = null;
 
@@ -464,6 +474,9 @@ let healthcareAdminAgent = null;
  * Initialize the healthcare admin agent
  */
 async function ensureAdminAgentInitialized(orchestrator) {
+  if (!orchestrator) {
+    throw new Error('Orchestrator not available. Server may still be initializing.');
+  }
   if (!healthcareAdminAgent) {
     healthcareAdminAgent = new HealthcareAdminAgent(orchestrator);
     await healthcareAdminAgent.initialize();
@@ -499,7 +512,7 @@ router.get('/admin/status', async (req, res) => {
  */
 router.post('/admin/init', async (req, res) => {
   try {
-    const orchestrator = req.app.locals.orchestrator;
+    const orchestrator = getOrchestrator(req);
     const agent = await ensureAdminAgentInitialized(orchestrator);
 
     res.json({
@@ -522,7 +535,7 @@ router.post('/admin/init', async (req, res) => {
  */
 router.post('/admin/command', async (req, res) => {
   try {
-    const orchestrator = req.app.locals.orchestrator;
+    const orchestrator = getOrchestrator(req);
     const agent = await ensureAdminAgentInitialized(orchestrator);
 
     const { message, conversationId } = req.body;
@@ -561,7 +574,7 @@ router.post('/admin/command', async (req, res) => {
  */
 router.get('/admin/tools', async (req, res) => {
   try {
-    const orchestrator = req.app.locals.orchestrator;
+    const orchestrator = getOrchestrator(req);
     const agent = await ensureAdminAgentInitialized(orchestrator);
 
     const userRole = req.headers['x-user-role'] || 'user';
@@ -620,7 +633,7 @@ router.get('/admin/schema/visualize', async (req, res) => {
     const format = req.query.format || 'mermaid';
     const scope = req.query.scope || 'all';
 
-    const orchestrator = req.app.locals.orchestrator;
+    const orchestrator = getOrchestrator(req);
     const agent = await ensureAdminAgentInitialized(orchestrator);
 
     // Call the visualize_schema tool directly
@@ -655,7 +668,7 @@ router.get('/admin/schema/visualize', async (req, res) => {
 async function ensureUserServiceInitialized(req) {
   // Try to get Cosmos client from orchestrator first
   if (!cosmosClient) {
-    const orchestrator = req?.app?.get('orchestrator');
+    const orchestrator = getOrchestrator(req);
     if (orchestrator?.cosmosGremlinClient?.initialized) {
       cosmosClient = orchestrator.cosmosGremlinClient;
       logger.info('Using orchestrator Cosmos Gremlin Client for healthcare auth');
@@ -977,6 +990,9 @@ router.get('/auth/users', async (req, res) => {
 });
 
 export default (orchestrator) => {
+  // Store orchestrator at module level so all routes can access it
+  moduleOrchestrator = orchestrator;
   router.orchestrator = orchestrator;
+  logger.info('Healthcare routes mounted with orchestrator:', orchestrator ? 'provided' : 'null');
   return router;
 };
