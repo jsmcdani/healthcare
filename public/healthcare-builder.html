@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare AI Builder - Metalligent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 28px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 .icon {
+            font-size: 32px;
+        }
+
+        .header .subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f0fdf4;
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #bbf7d0;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #166534;
+        }
+
+        .user-role {
+            font-size: 11px;
+            background: #10b981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 20px;
+        }
+
+        /* Guide Panel */
+        .guide-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 160px);
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            padding: 20px 30px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .steps-container {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .steps-container::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 40px;
+            right: 40px;
+            height: 3px;
+            background: #e2e8f0;
+            z-index: 0;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 1;
+            flex: 1;
+        }
+
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #a0aec0;
+            margin-bottom: 8px;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-circle {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .step.completed .step-circle {
+            background: #10b981;
+            color: white;
+        }
+
+        .step-label {
+            font-size: 12px;
+            color: #718096;
+            font-weight: 500;
+        }
+
+        .step.active .step-label {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        /* Guide Content */
+        .guide-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .step-title {
+            font-size: 24px;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .step-description {
+            color: #718096;
+            margin-bottom: 24px;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .prompt-card {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .prompt-label {
+            font-size: 12px;
+            color: #166534;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .prompt-text {
+            font-size: 16px;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .example-card {
+            background: linear-gradient(135deg, #10b98108 0%, #05966908 100%);
+            border: 1px solid #10b98130;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .example-label {
+            font-size: 12px;
+            color: #10b981;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .example-text {
+            font-size: 14px;
+            color: #4a5568;
+            font-style: italic;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        /* Commands Help */
+        .commands-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+
+        .commands-label {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .command-item {
+            display: flex;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .command-item:last-child {
+            border-bottom: none;
+        }
+
+        .command-item:hover {
+            background: #f0fdf4;
+            margin: 0 -16px;
+            padding: 8px 16px;
+        }
+
+        .command-name {
+            font-family: monospace;
+            color: #10b981;
+            font-weight: 600;
+            min-width: 140px;
+        }
+
+        .command-desc {
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 20px 30px;
+            border-top: 2px solid #e2e8f0;
+            background: #f7fafc;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-textarea {
+            flex: 1;
+            padding: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 15px;
+            resize: none;
+            min-height: 100px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .input-textarea:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .input-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Suggestions */
+        .suggestions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .suggestion-chip {
+            padding: 6px 14px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #4a5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: #10b981;
+            color: white;
+            border-color: #10b981;
+        }
+
+        /* Preview Panel */
+        .preview-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 160px);
+        }
+
+        .preview-header {
+            padding: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .preview-header h2 {
+            font-size: 18px;
+            color: #2d3748;
+        }
+
+        .preview-tabs {
+            display: flex;
+            gap: 4px;
+        }
+
+        .preview-tab {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            color: #718096;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+
+        .preview-tab.active {
+            background: #10b981;
+            color: white;
+        }
+
+        .preview-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* Activity Log */
+        .activity-log {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #f7fafc;
+            border-left: 4px solid #cbd5e0;
+        }
+
+        .activity-item.thinking {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .activity-item.tool-call {
+            border-left-color: #8b5cf6;
+            background: #f5f3ff;
+        }
+
+        .activity-item.tool-result {
+            border-left-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .activity-item.response {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .activity-item.error {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .activity-item.info {
+            border-left-color: #0ea5e9;
+            background: #f0f9ff;
+        }
+
+        .activity-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .activity-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .activity-title {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .activity-detail {
+            font-size: 13px;
+            color: #4a5568;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .activity-detail code {
+            background: rgba(0,0,0,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .activity-detail pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            overflow-x: auto;
+            margin-top: 8px;
+            max-height: 200px;
+        }
+
+        .activity-time {
+            font-size: 11px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+
+        /* Artifacts Panel */
+        .artifact-item {
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .artifact-header {
+            padding: 12px 16px;
+            background: #edf2f7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .artifact-name {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        .artifact-status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        .artifact-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .artifact-status.generated {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .artifact-preview {
+            padding: 16px;
+            display: none;
+        }
+
+        .artifact-preview.expanded {
+            display: block;
+        }
+
+        .artifact-preview pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 300px;
+        }
+
+        /* Test Panel */
+        .test-panel {
+            padding: 20px;
+        }
+
+        .test-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .test-input input {
+            flex: 1;
+            padding: 12px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .test-input input:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .test-result {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            color: #4a5568;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #718096;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #10b981;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            .preview-panel {
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div>
+                <h1><span class="icon">🏥</span> Healthcare AI Builder</h1>
+                <p class="subtitle">Build AI Experts, Knowledge Packs, Recipes, and Calibration Tests</p>
+            </div>
+            <div class="header-actions">
+                <div class="user-badge" id="userBadge">
+                    <span class="user-name" id="userName">Loading...</span>
+                    <span class="user-role" id="userRole">...</span>
+                </div>
+                <button class="btn btn-secondary" onclick="logout()">Logout</button>
+                <button class="btn btn-primary" id="newSessionBtn" onclick="startNewSession()">+ New Session</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-grid">
+            <!-- Guide Panel -->
+            <div class="guide-panel">
+                <!-- Progress Bar -->
+                <div class="progress-bar">
+                    <div class="steps-container" id="stepsContainer">
+                        <div class="step active" data-step="1">
+                            <div class="step-circle">1</div>
+                            <span class="step-label">Expert</span>
+                        </div>
+                        <div class="step" data-step="2">
+                            <div class="step-circle">2</div>
+                            <span class="step-label">Knowledge</span>
+                        </div>
+                        <div class="step" data-step="3">
+                            <div class="step-circle">3</div>
+                            <span class="step-label">Recipe</span>
+                        </div>
+                        <div class="step" data-step="4">
+                            <div class="step-circle">4</div>
+                            <span class="step-label">Calibrate</span>
+                        </div>
+                        <div class="step" data-step="5">
+                            <div class="step-circle">5</div>
+                            <span class="step-label">Deploy</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Guide Content -->
+                <div class="guide-content" id="guideContent">
+                    <h2 class="step-title">Step 1: Create AI Expert</h2>
+                    <p class="step-description">
+                        Define an AI Expert with specialized medical knowledge. Experts have system prompts,
+                        output contracts, and risk escalation rules. Start by describing what clinical specialty
+                        this expert will handle.
+                    </p>
+
+                    <div class="prompt-card">
+                        <div class="prompt-label">Your Task</div>
+                        <p class="prompt-text">
+                            Describe the AI Expert you want to create - its specialty, purpose, and what decisions it will make.
+                        </p>
+                    </div>
+
+                    <div class="example-card">
+                        <div class="example-label">Example</div>
+                        <p class="example-text">Create a Pediatric Dosing AI Expert that verifies medication dosages for children based on weight and age. It should check for maximum safe doses, age-appropriate formulations, and flag any high-risk medications.</p>
+                    </div>
+
+                    <div class="commands-card">
+                        <div class="commands-label">Available Commands</div>
+                        <div class="command-item" onclick="insertCommand('/create-expert')">
+                            <span class="command-name">/create-expert</span>
+                            <span class="command-desc">Create a new AI Expert</span>
+                        </div>
+                        <div class="command-item" onclick="insertCommand('/list-experts')">
+                            <span class="command-name">/list-experts</span>
+                            <span class="command-desc">Show all AI Experts</span>
+                        </div>
+                        <div class="command-item" onclick="insertCommand('/test-expert')">
+                            <span class="command-name">/test-expert</span>
+                            <span class="command-desc">Test an AI Expert with sample input</span>
+                        </div>
+                        <div class="command-item" onclick="insertCommand('/help')">
+                            <span class="command-name">/help</span>
+                            <span class="command-desc">Show all available commands</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <div class="input-container">
+                        <textarea
+                            class="input-textarea"
+                            id="nlsInput"
+                            placeholder="Describe what you want to build, or use a /command..."
+                        ></textarea>
+                        <div class="input-actions">
+                            <button class="btn btn-secondary" id="backBtn" disabled>Back</button>
+                            <button class="btn btn-primary" id="nextBtn" onclick="handleSubmit()">Send</button>
+                        </div>
+                    </div>
+                    <div class="suggestions" id="suggestions">
+                        <span class="suggestion-chip">Pediatric dosing</span>
+                        <span class="suggestion-chip">Drug interactions</span>
+                        <span class="suggestion-chip">Lab interpretation</span>
+                        <span class="suggestion-chip">Clinical triage</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Panel -->
+            <div class="preview-panel">
+                <div class="preview-header">
+                    <h2>Builder Activity</h2>
+                    <div class="preview-tabs">
+                        <button class="preview-tab active" data-tab="activity">Activity</button>
+                        <button class="preview-tab" data-tab="artifacts">Artifacts</button>
+                        <button class="preview-tab" data-tab="test">Test</button>
+                    </div>
+                </div>
+
+                <div class="preview-content" id="activityTab">
+                    <div class="activity-log" id="activityLog">
+                        <div class="activity-item info">
+                            <div class="activity-icon">🚀</div>
+                            <div class="activity-content">
+                                <div class="activity-title">Welcome to Healthcare AI Builder</div>
+                                <div class="activity-detail">Click "+ New Session" to start building AI Experts, Knowledge Packs, Recipes, and Calibration Tests.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="preview-content" id="artifactsTab" style="display: none;">
+                    <div class="artifact-item" id="expertArtifact">
+                        <div class="artifact-header" onclick="toggleArtifact('expert')">
+                            <span class="artifact-name">AI Experts</span>
+                            <span class="artifact-status pending">Pending</span>
+                        </div>
+                        <div class="artifact-preview" id="expertPreview">
+                            <pre>// AI Expert configurations will appear here</pre>
+                        </div>
+                    </div>
+
+                    <div class="artifact-item" id="knowledgeArtifact">
+                        <div class="artifact-header" onclick="toggleArtifact('knowledge')">
+                            <span class="artifact-name">Knowledge Packs</span>
+                            <span class="artifact-status pending">Pending</span>
+                        </div>
+                        <div class="artifact-preview" id="knowledgePreview">
+                            <pre>// Knowledge Pack definitions will appear here</pre>
+                        </div>
+                    </div>
+
+                    <div class="artifact-item" id="recipeArtifact">
+                        <div class="artifact-header" onclick="toggleArtifact('recipe')">
+                            <span class="artifact-name">Healthcare Recipes</span>
+                            <span class="artifact-status pending">Pending</span>
+                        </div>
+                        <div class="artifact-preview" id="recipePreview">
+                            <pre>// Recipe definitions will appear here</pre>
+                        </div>
+                    </div>
+
+                    <div class="artifact-item" id="calibrationArtifact">
+                        <div class="artifact-header" onclick="toggleArtifact('calibration')">
+                            <span class="artifact-name">Calibration Tests</span>
+                            <span class="artifact-status pending">Pending</span>
+                        </div>
+                        <div class="artifact-preview" id="calibrationPreview">
+                            <pre>// Test cases and suites will appear here</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="preview-content" id="testTab" style="display: none;">
+                    <div class="test-panel">
+                        <p style="margin-bottom: 16px; color: #718096; font-size: 14px;">
+                            Test your AI Expert or Recipe with a sample query:
+                        </p>
+                        <div class="test-input">
+                            <input type="text" id="testQuery" placeholder="e.g., Check dosage for amoxicillin 250mg for 5-year-old">
+                            <button class="btn btn-primary" id="runTestBtn" onclick="runTest()">Test</button>
+                        </div>
+                        <div class="test-result" id="testResult">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">🧪</div>
+                                <p>Enter a query to test your AI Expert</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        const state = {
+            sessionId: null,
+            conversationId: null,
+            currentStep: 1,
+            totalSteps: 5,
+            user: null,
+            artifacts: {
+                experts: [],
+                knowledgePacks: [],
+                recipes: [],
+                calibration: []
+            }
+        };
+
+        // Step definitions
+        const stepDefinitions = [
+            {
+                id: 1,
+                name: 'expert',
+                title: 'Step 1: Create AI Expert',
+                description: 'Define an AI Expert with specialized medical knowledge. Experts have system prompts, output contracts, and risk escalation rules.',
+                prompt: 'Describe the AI Expert you want to create - its specialty, purpose, and what decisions it will make.',
+                example: 'Create a Pediatric Dosing AI Expert that verifies medication dosages for children based on weight and age.',
+                commands: [
+                    { cmd: '/create-expert', desc: 'Create a new AI Expert' },
+                    { cmd: '/list-experts', desc: 'Show all AI Experts' },
+                    { cmd: '/test-expert', desc: 'Test an AI Expert' },
+                    { cmd: '/configure-prompt', desc: 'Update expert system prompt' }
+                ],
+                suggestions: ['Pediatric dosing', 'Drug interactions', 'Lab interpretation', 'Clinical triage']
+            },
+            {
+                id: 2,
+                name: 'knowledge',
+                title: 'Step 2: Add Knowledge Packs',
+                description: 'Create knowledge packs with clinical guidelines, drug formularies, reference ranges, and other medical data.',
+                prompt: 'What clinical knowledge does your AI Expert need? Guidelines, formularies, reference data?',
+                example: 'Import FDA pediatric labeling guidelines, weight-based dosing tables, and max dose limits for common medications.',
+                commands: [
+                    { cmd: '/create-pack', desc: 'Create a knowledge pack' },
+                    { cmd: '/import-guidelines', desc: 'Import clinical guidelines' },
+                    { cmd: '/import-formulary', desc: 'Import drug formulary' },
+                    { cmd: '/list-packs', desc: 'Show all knowledge packs' }
+                ],
+                suggestions: ['Clinical guidelines', 'Drug formulary', 'Lab ranges', 'ICD-10 codes']
+            },
+            {
+                id: 3,
+                name: 'recipe',
+                title: 'Step 3: Build Healthcare Recipe',
+                description: 'Create a recipe that orchestrates the AI Expert with validation, assertions, and workflow steps.',
+                prompt: 'Define the recipe workflow - what inputs, validations, and outputs do you need?',
+                example: 'Recipe: Receive medication order, validate dose against weight, check interactions, return approval/rejection with reasoning.',
+                commands: [
+                    { cmd: '/create-recipe', desc: 'Create a healthcare recipe' },
+                    { cmd: '/add-step', desc: 'Add a step to recipe' },
+                    { cmd: '/add-assertion', desc: 'Add correctness assertion' },
+                    { cmd: '/validate-recipe', desc: 'Validate recipe structure' }
+                ],
+                suggestions: ['Dose validation', 'Interaction check', 'Approval workflow', 'Alert routing']
+            },
+            {
+                id: 4,
+                name: 'calibrate',
+                title: 'Step 4: Create Calibration Tests',
+                description: 'Define gold-standard test cases to calibrate AI Expert accuracy and track performance over time.',
+                prompt: 'Create test cases with known correct answers to calibrate and validate your AI Expert.',
+                example: 'Test case: 25kg child, amoxicillin 500mg TID -> Expected: REJECT (exceeds max dose of 40mg/kg/day)',
+                commands: [
+                    { cmd: '/create-test', desc: 'Create a test case' },
+                    { cmd: '/create-suite', desc: 'Create a test suite' },
+                    { cmd: '/run-calibration', desc: 'Run calibration tests' },
+                    { cmd: '/analyze-results', desc: 'Analyze calibration results' }
+                ],
+                suggestions: ['Add pass case', 'Add fail case', 'Edge cases', 'Run suite']
+            },
+            {
+                id: 5,
+                name: 'deploy',
+                title: 'Step 5: Deploy & Monitor',
+                description: 'Review all components, run final validation, and deploy to production.',
+                prompt: 'Review your AI Expert, Knowledge Packs, Recipe, and Tests. Ready to deploy?',
+                example: null,
+                commands: [
+                    { cmd: '/run-tests', desc: 'Run all correctness tests' },
+                    { cmd: '/generate-report', desc: 'Generate test report' },
+                    { cmd: '/deploy', desc: 'Deploy to production' },
+                    { cmd: '/status', desc: 'Check deployment status' }
+                ],
+                suggestions: ['Run all tests', 'Generate report', 'Deploy', 'View summary']
+            }
+        ];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('Healthcare Builder initializing...');
+            await checkAuth();
+            initializeUI();
+            attachEventListeners();
+        });
+
+        // Check authentication
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/healthcare/auth/session');
+                const data = await response.json();
+
+                if (data.valid && data.session) {
+                    state.user = data.session;
+                    document.getElementById('userName').textContent = data.session.name || data.session.email;
+                    document.getElementById('userRole').textContent = data.session.role;
+                } else {
+                    window.location.href = '/healthcare-login.html?redirect=/healthcare-builder.html';
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/healthcare-login.html?redirect=/healthcare-builder.html';
+            }
+        }
+
+        function logout() {
+            fetch('/api/healthcare/auth/logout', { method: 'POST' })
+                .finally(() => {
+                    window.location.href = '/healthcare-login.html';
+                });
+        }
+
+        function initializeUI() {
+            updateStepUI();
+        }
+
+        function attachEventListeners() {
+            // Preview tabs
+            document.querySelectorAll('.preview-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => switchTab(e.target.dataset.tab));
+            });
+
+            // Suggestion chips
+            document.querySelectorAll('.suggestion-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    const input = document.getElementById('nlsInput');
+                    input.value = e.target.textContent;
+                    input.focus();
+                });
+            });
+
+            // Enter key to submit
+            document.getElementById('nlsInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                }
+            });
+
+            // Back button
+            document.getElementById('backBtn').addEventListener('click', handleBack);
+        }
+
+        async function startNewSession() {
+            clearActivityLog();
+            logActivity('info', 'Starting New Session', 'Initializing Healthcare Builder session...');
+
+            try {
+                const response = await fetch('/api/healthcare/builder/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        command: 'Start a new healthcare builder session. I want to build AI Experts and Recipes.',
+                        context: { step: 1 }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    state.conversationId = data.conversationId;
+                    state.currentStep = 1;
+
+                    logActivity('response', 'Session Started', data.response || 'Ready to build healthcare AI components.');
+
+                    // Show tools available
+                    if (data.toolsUsed && data.toolsUsed.length > 0) {
+                        data.toolsUsed.forEach(tool => {
+                            logActivity('tool-call', `Tool: ${tool.name}`, JSON.stringify(tool.input, null, 2));
+                            if (tool.output) {
+                                logActivity('tool-result', 'Result', JSON.stringify(tool.output, null, 2));
+                            }
+                        });
+                    }
+
+                    updateStepUI();
+                    document.getElementById('nlsInput').value = '';
+                } else {
+                    logActivity('error', 'Session Failed', data.error || 'Could not start session');
+                }
+            } catch (error) {
+                logActivity('error', 'Error', error.message);
+            }
+        }
+
+        async function handleSubmit() {
+            const input = document.getElementById('nlsInput').value.trim();
+            if (!input) return;
+
+            // Check if it's a command
+            const isCommand = input.startsWith('/');
+
+            logActivity('thinking', 'Processing', `"${input.substring(0, 100)}${input.length > 100 ? '...' : ''}"`);
+
+            try {
+                const endpoint = state.conversationId
+                    ? '/api/healthcare/builder/continue'
+                    : '/api/healthcare/builder/command';
+
+                const body = state.conversationId
+                    ? { conversationId: state.conversationId, message: input }
+                    : { command: input, context: { step: state.currentStep } };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    state.conversationId = data.conversationId || state.conversationId;
+
+                    // Log tool calls (ReAct loop visibility)
+                    if (data.toolsUsed && data.toolsUsed.length > 0) {
+                        data.toolsUsed.forEach(tool => {
+                            logActivity('tool-call', `Tool: ${tool.name}`,
+                                `Input:\n${JSON.stringify(tool.input, null, 2)}`);
+                            if (tool.output) {
+                                logActivity('tool-result', `Result: ${tool.name}`,
+                                    typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2));
+                            }
+                        });
+                    }
+
+                    // Log the response
+                    logActivity('response', 'Assistant', data.response || 'Done.');
+
+                    // Update artifacts if returned
+                    if (data.artifacts) {
+                        updateArtifacts(data.artifacts);
+                    }
+
+                    document.getElementById('nlsInput').value = '';
+                } else {
+                    logActivity('error', 'Error', data.error || 'Request failed');
+                }
+            } catch (error) {
+                logActivity('error', 'Network Error', error.message);
+            }
+        }
+
+        function handleBack() {
+            if (state.currentStep > 1) {
+                state.currentStep--;
+                updateStepUI();
+            }
+        }
+
+        function insertCommand(cmd) {
+            const input = document.getElementById('nlsInput');
+            input.value = cmd + ' ';
+            input.focus();
+        }
+
+        function updateStepUI() {
+            const stepDef = stepDefinitions[state.currentStep - 1];
+
+            // Update progress bar
+            document.querySelectorAll('.step').forEach((el, index) => {
+                el.classList.remove('active', 'completed');
+                if (index + 1 === state.currentStep) {
+                    el.classList.add('active');
+                } else if (index + 1 < state.currentStep) {
+                    el.classList.add('completed');
+                }
+            });
+
+            // Update content
+            document.querySelector('.step-title').textContent = stepDef.title;
+            document.querySelector('.step-description').textContent = stepDef.description;
+            document.querySelector('.prompt-text').textContent = stepDef.prompt;
+
+            if (stepDef.example) {
+                document.querySelector('.example-card').style.display = 'block';
+                document.querySelector('.example-text').textContent = stepDef.example;
+            } else {
+                document.querySelector('.example-card').style.display = 'none';
+            }
+
+            // Update commands
+            const commandsCard = document.querySelector('.commands-card');
+            const commandItems = stepDef.commands.map(c => `
+                <div class="command-item" onclick="insertCommand('${c.cmd}')">
+                    <span class="command-name">${c.cmd}</span>
+                    <span class="command-desc">${c.desc}</span>
+                </div>
+            `).join('');
+            commandsCard.innerHTML = `
+                <div class="commands-label">Available Commands</div>
+                ${commandItems}
+            `;
+
+            // Update suggestions
+            const suggestionsDiv = document.getElementById('suggestions');
+            suggestionsDiv.innerHTML = stepDef.suggestions.map(s =>
+                `<span class="suggestion-chip">${s}</span>`
+            ).join('');
+
+            // Reattach listeners
+            document.querySelectorAll('.suggestion-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    document.getElementById('nlsInput').value = e.target.textContent;
+                    document.getElementById('nlsInput').focus();
+                });
+            });
+
+            // Update buttons
+            document.getElementById('backBtn').disabled = state.currentStep <= 1;
+        }
+
+        function updateArtifacts(artifacts) {
+            if (artifacts.experts) {
+                state.artifacts.experts = artifacts.experts;
+                updateArtifactPanel('expert', artifacts.experts);
+            }
+            if (artifacts.knowledgePacks) {
+                state.artifacts.knowledgePacks = artifacts.knowledgePacks;
+                updateArtifactPanel('knowledge', artifacts.knowledgePacks);
+            }
+            if (artifacts.recipes) {
+                state.artifacts.recipes = artifacts.recipes;
+                updateArtifactPanel('recipe', artifacts.recipes);
+            }
+            if (artifacts.calibration) {
+                state.artifacts.calibration = artifacts.calibration;
+                updateArtifactPanel('calibration', artifacts.calibration);
+            }
+        }
+
+        function updateArtifactPanel(id, data) {
+            const artifact = document.getElementById(`${id}Artifact`);
+            if (!artifact) return;
+
+            const statusEl = artifact.querySelector('.artifact-status');
+            const previewEl = document.getElementById(`${id}Preview`);
+            const preEl = previewEl?.querySelector('pre');
+
+            if (data && (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0)) {
+                statusEl.textContent = 'Generated';
+                statusEl.className = 'artifact-status generated';
+                if (preEl) {
+                    preEl.textContent = JSON.stringify(data, null, 2);
+                }
+                previewEl?.classList.add('expanded');
+            }
+        }
+
+        function toggleArtifact(id) {
+            const preview = document.getElementById(`${id}Preview`);
+            preview.classList.toggle('expanded');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+
+            document.getElementById('activityTab').style.display = tab === 'activity' ? 'block' : 'none';
+            document.getElementById('artifactsTab').style.display = tab === 'artifacts' ? 'block' : 'none';
+            document.getElementById('testTab').style.display = tab === 'test' ? 'block' : 'none';
+        }
+
+        async function runTest() {
+            const query = document.getElementById('testQuery').value.trim();
+            if (!query) return;
+
+            const resultDiv = document.getElementById('testResult');
+            resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Testing...</div>';
+
+            try {
+                const response = await fetch('/api/healthcare/builder/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        command: `/test-expert ${query}`,
+                        conversationId: state.conversationId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div style="color: #166534; margin-bottom: 8px;">✓ Test completed</div>
+                        <pre style="background: #f1f5f9; padding: 12px; border-radius: 6px; font-size: 12px; overflow: auto;">${data.response || JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="color: #991b1b;">✗ ${data.error || 'Test failed'}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: #991b1b;">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Activity logging
+        function logActivity(type, title, detail, showJson = null) {
+            const icons = {
+                thinking: '🤔',
+                'tool-call': '🔧',
+                'tool-result': '📦',
+                response: '💬',
+                error: '❌',
+                info: 'ℹ️',
+                success: '✅'
+            };
+
+            const log = document.getElementById('activityLog');
+            const item = document.createElement('div');
+            item.className = `activity-item ${type}`;
+
+            let detailHtml = detail;
+            if (showJson) {
+                detailHtml += `<pre>${JSON.stringify(showJson, null, 2)}</pre>`;
+            }
+
+            item.innerHTML = `
+                <div class="activity-icon">${icons[type] || '📌'}</div>
+                <div class="activity-content">
+                    <div class="activity-title">${title}</div>
+                    <div class="activity-detail">${detailHtml}</div>
+                    <div class="activity-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+
+            log.appendChild(item);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearActivityLog() {
+            document.getElementById('activityLog').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
