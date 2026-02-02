@@ -1,0 +1,197 @@
+{
+  "id": "offline.hotspots.compute.v1",
+  "name": "Compute Hotspot Analysis",
+  "description": "Offline recipe to identify and rank system hotspots based on usage patterns",
+  "version": "1.0.0",
+  "namespace": "offline",
+  "category": "analysis",
+  "schedulable": true,
+  "input": {
+    "required": ["orgId"],
+    "optional": ["timePeriodDays", "minActivityThreshold", "entityTypes"],
+    "defaults": {
+      "timePeriodDays": 30,
+      "minActivityThreshold": 10,
+      "entityTypes": ["field", "object", "workflow", "rule"]
+    }
+  },
+  "steps": [
+    {
+      "id": "fetchActivityLogs",
+      "step": "haven/query",
+      "description": "Fetch activity logs for the time period",
+      "params": {
+        "aql": "FOR log IN activity_logs FILTER log.orgId == @orgId AND log.timestamp >= DATE_SUBTRACT(DATE_NOW(), @days, 'day') RETURN log",
+        "bindVars": {
+          "orgId": "$orgId",
+          "days": "$timePeriodDays"
+        }
+      }
+    },
+    {
+      "id": "fetchErrorLogs",
+      "step": "haven/query",
+      "description": "Fetch error logs for correlation",
+      "params": {
+        "aql": "FOR log IN error_logs FILTER log.orgId == @orgId AND log.timestamp >= DATE_SUBTRACT(DATE_NOW(), @days, 'day') RETURN log",
+        "bindVars": {
+          "orgId": "$orgId",
+          "days": "$timePeriodDays"
+        }
+      },
+      "parallel": true
+    },
+    {
+      "id": "fetchDependencies",
+      "step": "haven/query",
+      "description": "Fetch dependency graph",
+      "params": {
+        "aql": "FOR e IN dependencies FILTER e.orgId == @orgId RETURN e",
+        "bindVars": {
+          "orgId": "$orgId"
+        }
+      },
+      "parallel": true
+    },
+    {
+      "id": "aggregateActivity",
+      "step": "compute/aggregate",
+      "description": "Aggregate activity by entity",
+      "params": {
+        "input": "$fetchActivityLogs",
+        "groupBy": ["entityId", "entityType"],
+        "metrics": {
+          "accessCount": { "type": "count" },
+          "modificationCount": { "type": "countWhere", "condition": "action == 'modify'" },
+          "lastActivity": { "type": "max", "field": "timestamp" }
+        }
+      },
+      "dependsOn": ["fetchActivityLogs"]
+    },
+    {
+      "id": "correlateErrors",
+      "step": "compute/join",
+      "description": "Correlate errors with entities",
+      "params": {
+        "left": "$aggregateActivity",
+        "right": "$fetchErrorLogs",
+        "on": "entityId",
+        "type": "left",
+        "rightMetrics": {
+          "errorCount": { "type": "count" }
+        }
+      },
+      "dependsOn": ["aggregateActivity", "fetchErrorLogs"]
+    },
+    {
+      "id": "countDependencies",
+      "step": "compute/aggregate",
+      "description": "Count dependencies per entity",
+      "params": {
+        "input": "$fetchDependencies",
+        "groupBy": ["sourceId"],
+        "metrics": {
+          "dependencyCount": { "type": "count" }
+        }
+      },
+      "dependsOn": ["fetchDependencies"]
+    },
+    {
+      "id": "calculateScores",
+      "step": "compute/transform",
+      "description": "Calculate hotspot scores",
+      "params": {
+        "input": "$correlateErrors",
+        "transform": {
+          "type": "formula",
+          "formula": "(accessCount * 1) + (modificationCount * 2) + (errorCount * 5) + (dependencyCount * 0.5)",
+          "outputField": "score"
+        },
+        "join": {
+          "data": "$countDependencies",
+          "on": "entityId",
+          "fields": ["dependencyCount"]
+        }
+      },
+      "dependsOn": ["correlateErrors", "countDependencies"]
+    },
+    {
+      "id": "rankHotspots",
+      "step": "compute/sort",
+      "description": "Rank hotspots by score",
+      "params": {
+        "input": "$calculateScores",
+        "by": "score",
+        "order": "desc",
+        "addRank": true,
+        "filter": {
+          "score": { "$gte": "$minActivityThreshold" }
+        }
+      },
+      "dependsOn": ["calculateScores"]
+    },
+    {
+      "id": "detectTrends",
+      "step": "compute/analyze",
+      "description": "Detect activity trends",
+      "params": {
+        "input": "$rankHotspots",
+        "analysisType": "trend_detection",
+        "options": {
+          "compareWithPreviousPeriod": true,
+          "trendThreshold": 0.1
+        }
+      },
+      "dependsOn": ["rankHotspots"]
+    },
+    {
+      "id": "buildPack",
+      "step": "artifact/create",
+      "description": "Create hotspot pack artifact",
+      "params": {
+        "artifactType": "feature_pack",
+        "packType": "hotspot",
+        "name": "Hotspot Analysis - {{$orgId}}",
+        "items": "$detectTrends",
+        "computation": {
+          "computedBy": "offline.hotspots.compute.v1",
+          "inputArtifactRefs": ["activity_logs", "error_logs", "dependencies"]
+        },
+        "thresholds": {
+          "high": 100,
+          "medium": 50,
+          "low": 10
+        }
+      },
+      "dependsOn": ["detectTrends"]
+    }
+  ],
+  "output": {
+    "data": {
+      "pack": "$buildPack",
+      "summary": {
+        "totalHotspots": "$rankHotspots.length",
+        "highPriority": "$rankHotspots.filter(h => h.score >= 100).length",
+        "timePeriod": {
+          "days": "$timePeriodDays",
+          "start": "{{DATE_SUBTRACT(DATE_NOW(), $timePeriodDays, 'day')}}",
+          "end": "{{DATE_NOW()}}"
+        }
+      },
+      "recommendations": "$detectTrends.recommendations"
+    }
+  },
+  "metadata": {
+    "author": "system",
+    "createdAt": "2025-02-01",
+    "tags": ["offline", "hotspots", "analysis", "performance"],
+    "riskClassification": "LOW",
+    "approvalRequired": false,
+    "documentation": "This recipe computes hotspot scores based on activity, errors, and dependencies. Results are stored as a feature pack for UI consumption."
+  },
+  "scheduling": {
+    "recommended": "0 3 * * *",
+    "description": "Run daily at 3 AM",
+    "minInterval": "6h"
+  }
+}

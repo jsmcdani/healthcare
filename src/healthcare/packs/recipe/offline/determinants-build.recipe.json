@@ -1,0 +1,143 @@
+{
+  "id": "offline.determinants.build.v1",
+  "name": "Build Determinant Profiles",
+  "description": "Offline recipe to build and update determinant profiles based on metadata analysis",
+  "version": "1.0.0",
+  "namespace": "offline",
+  "category": "determinants",
+  "schedulable": true,
+  "input": {
+    "required": ["orgId"],
+    "optional": ["domain", "forceRebuild"],
+    "defaults": {
+      "domain": "healthcare",
+      "forceRebuild": false
+    }
+  },
+  "steps": [
+    {
+      "id": "fetchMetadata",
+      "step": "haven/query",
+      "description": "Fetch current metadata for analysis",
+      "params": {
+        "aql": "FOR doc IN metadata FILTER doc.orgId == @orgId AND doc.domain == @domain RETURN doc",
+        "bindVars": {
+          "orgId": "$orgId",
+          "domain": "$domain"
+        }
+      }
+    },
+    {
+      "id": "fetchExistingProfiles",
+      "step": "haven/query",
+      "description": "Fetch existing determinant profiles",
+      "params": {
+        "aql": "FOR doc IN artifacts FILTER doc.orgId == @orgId AND doc.artifactType == 'determinant_profile' AND doc.status == 'active' RETURN doc",
+        "bindVars": {
+          "orgId": "$orgId"
+        }
+      },
+      "dependsOn": ["fetchMetadata"]
+    },
+    {
+      "id": "analyzePatterns",
+      "step": "compute/analyze",
+      "description": "Analyze metadata patterns for determinant detection",
+      "params": {
+        "input": "$fetchMetadata",
+        "analysisType": "pattern_detection",
+        "options": {
+          "detectFieldUsage": true,
+          "detectAccessPatterns": true,
+          "detectConstraintViolations": true,
+          "minConfidence": 0.7
+        }
+      },
+      "dependsOn": ["fetchMetadata"]
+    },
+    {
+      "id": "compareProfiles",
+      "step": "compute/diff",
+      "description": "Compare current patterns with existing profiles",
+      "params": {
+        "current": "$analyzePatterns",
+        "existing": "$fetchExistingProfiles",
+        "options": {
+          "detectNewRules": true,
+          "detectObsoleteRules": true,
+          "detectConflicts": true
+        }
+      },
+      "dependsOn": ["analyzePatterns", "fetchExistingProfiles"]
+    },
+    {
+      "id": "generateRecommendations",
+      "step": "compute/transform",
+      "description": "Generate profile update recommendations",
+      "params": {
+        "input": "$compareProfiles",
+        "transform": {
+          "type": "recommendations",
+          "fields": {
+            "newRules": "$compareProfiles.newRules",
+            "obsoleteRules": "$compareProfiles.obsoleteRules",
+            "conflicts": "$compareProfiles.conflicts"
+          },
+          "format": {
+            "includeRationale": true,
+            "includePriority": true,
+            "includeImpact": true
+          }
+        }
+      },
+      "dependsOn": ["compareProfiles"]
+    },
+    {
+      "id": "formatOutput",
+      "step": "compute/merge",
+      "description": "Format final output with recommendations",
+      "params": {
+        "sources": [
+          {
+            "key": "metadata",
+            "value": {
+              "analyzed": "$fetchMetadata.length",
+              "domain": "$domain"
+            }
+          },
+          {
+            "key": "existingProfiles",
+            "value": "$fetchExistingProfiles.length"
+          },
+          {
+            "key": "recommendations",
+            "value": "$generateRecommendations"
+          },
+          {
+            "key": "proposedChanges",
+            "value": "$compareProfiles.changes"
+          }
+        ]
+      },
+      "dependsOn": ["generateRecommendations"]
+    }
+  ],
+  "output": {
+    "data": "$formatOutput",
+    "includeRecommendations": true,
+    "includeProposedChanges": true
+  },
+  "metadata": {
+    "author": "system",
+    "createdAt": "2025-02-01",
+    "tags": ["offline", "determinants", "profiles", "analysis"],
+    "riskClassification": "MEDIUM",
+    "approvalRequired": true,
+    "documentation": "This recipe analyzes metadata patterns and generates recommendations for updating determinant profiles. It does NOT auto-apply changes - all recommendations go through the approval workflow."
+  },
+  "scheduling": {
+    "recommended": "0 2 * * *",
+    "description": "Run daily at 2 AM",
+    "minInterval": "24h"
+  }
+}

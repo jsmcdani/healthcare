@@ -1,0 +1,196 @@
+{
+  "id": "offline.affinity.analyze.v1",
+  "name": "Analyze Field Affinities",
+  "description": "Offline recipe to discover and analyze field/entity affinities and co-occurrence patterns",
+  "version": "1.0.0",
+  "namespace": "offline",
+  "category": "analysis",
+  "schedulable": true,
+  "input": {
+    "required": ["orgId"],
+    "optional": ["minSupport", "minConfidence", "maxPairs", "entityTypes"],
+    "defaults": {
+      "minSupport": 0.1,
+      "minConfidence": 0.5,
+      "maxPairs": 1000,
+      "entityTypes": ["field", "object"]
+    }
+  },
+  "steps": [
+    {
+      "id": "fetchUsagePatterns",
+      "step": "haven/query",
+      "description": "Fetch usage patterns for affinity analysis",
+      "params": {
+        "aql": "FOR session IN user_sessions FILTER session.orgId == @orgId FOR access IN session.accesses RETURN { sessionId: session._key, entityId: access.entityId, entityType: access.entityType, entityName: access.entityName, timestamp: access.timestamp }",
+        "bindVars": {
+          "orgId": "$orgId"
+        }
+      }
+    },
+    {
+      "id": "fetchExistingRelations",
+      "step": "haven/query",
+      "description": "Fetch existing declared relationships",
+      "params": {
+        "aql": "FOR rel IN relationships FILTER rel.orgId == @orgId RETURN rel",
+        "bindVars": {
+          "orgId": "$orgId"
+        }
+      },
+      "parallel": true
+    },
+    {
+      "id": "buildCoOccurrenceMatrix",
+      "step": "compute/transform",
+      "description": "Build co-occurrence matrix from usage patterns",
+      "params": {
+        "input": "$fetchUsagePatterns",
+        "transform": {
+          "type": "co_occurrence",
+          "groupBy": "sessionId",
+          "entityField": "entityId",
+          "options": {
+            "windowSize": 1,
+            "countSelf": false
+          }
+        }
+      },
+      "dependsOn": ["fetchUsagePatterns"]
+    },
+    {
+      "id": "calculateAffinityScores",
+      "step": "compute/analyze",
+      "description": "Calculate affinity scores using association rules",
+      "params": {
+        "input": "$buildCoOccurrenceMatrix",
+        "analysisType": "association_rules",
+        "options": {
+          "minSupport": "$minSupport",
+          "minConfidence": "$minConfidence",
+          "maxRules": "$maxPairs",
+          "metrics": ["support", "confidence", "lift"]
+        }
+      },
+      "dependsOn": ["buildCoOccurrenceMatrix"]
+    },
+    {
+      "id": "enrichWithMetadata",
+      "step": "compute/join",
+      "description": "Enrich affinities with entity metadata",
+      "params": {
+        "input": "$calculateAffinityScores",
+        "lookupSource": "$fetchUsagePatterns",
+        "lookupFields": ["entityName", "entityType"],
+        "lookupKey": "entityId",
+        "targetKeys": ["sourceId", "targetId"]
+      },
+      "dependsOn": ["calculateAffinityScores"]
+    },
+    {
+      "id": "classifyAffinityTypes",
+      "step": "compute/transform",
+      "description": "Classify affinity types based on patterns",
+      "params": {
+        "input": "$enrichWithMetadata",
+        "transform": {
+          "type": "classify",
+          "rules": [
+            {
+              "condition": "lift > 3 AND confidence > 0.8",
+              "affinityType": "co_occurrence",
+              "strength": "strong"
+            },
+            {
+              "condition": "EXISTS(declaredRelation)",
+              "affinityType": "dependency",
+              "strength": "declared"
+            },
+            {
+              "condition": "sourceType == targetType AND lift > 2",
+              "affinityType": "semantic",
+              "strength": "moderate"
+            },
+            {
+              "condition": "default",
+              "affinityType": "co_occurrence",
+              "strength": "weak"
+            }
+          ]
+        },
+        "join": {
+          "data": "$fetchExistingRelations",
+          "on": ["sourceId", "targetId"],
+          "fields": ["relationType"],
+          "as": "declaredRelation"
+        }
+      },
+      "dependsOn": ["enrichWithMetadata", "fetchExistingRelations"]
+    },
+    {
+      "id": "detectClusters",
+      "step": "compute/analyze",
+      "description": "Detect affinity clusters",
+      "params": {
+        "input": "$classifyAffinityTypes",
+        "analysisType": "clustering",
+        "options": {
+          "algorithm": "connected_components",
+          "minClusterSize": 3,
+          "edgeWeight": "score"
+        }
+      },
+      "dependsOn": ["classifyAffinityTypes"]
+    },
+    {
+      "id": "buildPack",
+      "step": "artifact/create",
+      "description": "Create affinity pack artifact",
+      "params": {
+        "artifactType": "feature_pack",
+        "packType": "affinity",
+        "name": "Field Affinity Analysis - {{$orgId}}",
+        "items": "$classifyAffinityTypes",
+        "clusters": "$detectClusters.clusters",
+        "computation": {
+          "computedBy": "offline.affinity.analyze.v1",
+          "algorithm": "association_rules",
+          "algorithmVersion": "1.0"
+        },
+        "thresholds": {
+          "strong": 0.8,
+          "moderate": 0.5,
+          "weak": 0.2
+        }
+      },
+      "dependsOn": ["classifyAffinityTypes", "detectClusters"]
+    }
+  ],
+  "output": {
+    "data": {
+      "pack": "$buildPack",
+      "summary": {
+        "totalAffinities": "$classifyAffinityTypes.length",
+        "strongAffinities": "$classifyAffinityTypes.filter(a => a.strength == 'strong').length",
+        "clusterCount": "$detectClusters.clusters.length",
+        "analysisParams": {
+          "minSupport": "$minSupport",
+          "minConfidence": "$minConfidence"
+        }
+      }
+    }
+  },
+  "metadata": {
+    "author": "system",
+    "createdAt": "2025-02-01",
+    "tags": ["offline", "affinity", "analysis", "patterns"],
+    "riskClassification": "LOW",
+    "approvalRequired": false,
+    "documentation": "This recipe analyzes field usage patterns to discover implicit relationships and affinities between entities."
+  },
+  "scheduling": {
+    "recommended": "0 4 * * 0",
+    "description": "Run weekly on Sunday at 4 AM",
+    "minInterval": "24h"
+  }
+}

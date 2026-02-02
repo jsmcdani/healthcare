@@ -1,9 +1,40 @@
 /**
  * Recipe Engine
  * Executes recipes (predefined task execution plans) with policy and knowledge integration
+ *
+ * Contract Integration:
+ * - Integrates with core contract enforcement
+ * - Validates execution against schemas
+ * - Supports artifact creation through contracts
  */
 
 import { Logger } from '../../../utils/logger.js';
+
+// Contract enforcement integration (lazy load to avoid circular deps)
+let ContractEnforcer = null;
+let ArtifactFactories = null;
+
+async function loadContractModules() {
+  if (!ContractEnforcer) {
+    try {
+      const module = await import('../../../core/contracts/ContractEnforcer.js');
+      ContractEnforcer = module.getContractEnforcer;
+    } catch (e) {
+      // Contract module not available
+    }
+  }
+  if (!ArtifactFactories) {
+    try {
+      const module = await import('../../../core/artifacts/index.js');
+      ArtifactFactories = {
+        createFeaturePack: module.createFeaturePack,
+        createProposal: module.createProposal
+      };
+    } catch (e) {
+      // Artifact module not available
+    }
+  }
+}
 
 export class RecipeEngine {
   constructor(options = {}) {
@@ -13,6 +44,35 @@ export class RecipeEngine {
     this.policyEngine = options.policyEngine;
     this.knowledgeEngine = options.knowledgeEngine;
     this.graphService = options.graphService;
+
+    // Contract enforcement
+    this.contractEnforcer = null;
+    this.artifactFactories = null;
+    this.enforcementEnabled = options.enforcementEnabled !== false;
+
+    // Initialize contract modules asynchronously
+    this.initPromise = this.initializeContracts();
+  }
+
+  /**
+   * Initialize contract enforcement
+   */
+  async initializeContracts() {
+    await loadContractModules();
+    if (ContractEnforcer && this.enforcementEnabled) {
+      this.contractEnforcer = ContractEnforcer();
+      this.logger.info('Contract enforcement enabled for RecipeEngine');
+    }
+    if (ArtifactFactories) {
+      this.artifactFactories = ArtifactFactories;
+    }
+  }
+
+  /**
+   * Ensure contracts are initialized
+   */
+  async ensureInitialized() {
+    await this.initPromise;
   }
 
   /**
@@ -85,6 +145,9 @@ export class RecipeEngine {
    * Execute a recipe
    */
   async execute(recipe, context = {}) {
+    // Ensure contract modules are loaded
+    await this.ensureInitialized();
+
     const executionId = `exec_${Date.now()}`;
     const execution = {
       id: executionId,
