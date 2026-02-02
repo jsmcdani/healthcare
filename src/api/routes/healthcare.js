@@ -12,6 +12,9 @@
 import express from 'express';
 import { createHealthcareStack } from '../../healthcare/index.js';
 import { DecisionArtifact } from '../../healthcare/reasoning/DecisionArtifact.js';
+import { HealthcareAdminAgent } from '../../healthcare/admin/HealthcareAdminAgent.js';
+import { HealthcareUserService } from '../../healthcare/auth/HealthcareUserService.js';
+import { CosmosGremlinClient } from '../../database/CosmosGremlinClient.js';
 import { Logger } from '../../utils/logger.js';
 
 const router = express.Router();
@@ -19,6 +22,12 @@ const logger = new Logger('HealthcareAPI');
 
 // Healthcare stack instance (initialized on first request or via init endpoint)
 let healthcareStack = null;
+
+// Healthcare user service (initialized when Cosmos is available)
+let healthcareUserService = null;
+
+// Cosmos client for healthcare auth (separate from main stack)
+let cosmosClient = null;
 
 /**
  * Initialize the healthcare stack
@@ -445,4 +454,529 @@ router.get('/graph/stats', async (req, res) => {
   }
 });
 
-export default router;
+// ============================================================
+// HEALTHCARE ADMIN AGENT ROUTES
+// ============================================================
+
+let healthcareAdminAgent = null;
+
+/**
+ * Initialize the healthcare admin agent
+ */
+async function ensureAdminAgentInitialized(orchestrator) {
+  if (!healthcareAdminAgent) {
+    healthcareAdminAgent = new HealthcareAdminAgent(orchestrator);
+    await healthcareAdminAgent.initialize();
+    logger.info('Healthcare Admin Agent initialized');
+  }
+  return healthcareAdminAgent;
+}
+
+/**
+ * GET /api/healthcare/admin/status
+ * Get admin agent status
+ */
+router.get('/admin/status', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      initialized: !!healthcareAdminAgent,
+      poolConnected: healthcareAdminAgent?.poolDatabaseConnected || false,
+      activeConversations: healthcareAdminAgent?.activeConversations?.size || 0
+    });
+  } catch (error) {
+    logger.error('Failed to get admin status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/admin/init
+ * Initialize the healthcare admin agent
+ */
+router.post('/admin/init', async (req, res) => {
+  try {
+    const orchestrator = req.app.locals.orchestrator;
+    const agent = await ensureAdminAgentInitialized(orchestrator);
+
+    res.json({
+      success: true,
+      message: 'Healthcare Admin Agent initialized',
+      initialized: true
+    });
+  } catch (error) {
+    logger.error('Failed to initialize admin agent:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/admin/command
+ * Process a natural language admin command
+ */
+router.post('/admin/command', async (req, res) => {
+  try {
+    const orchestrator = req.app.locals.orchestrator;
+    const agent = await ensureAdminAgentInitialized(orchestrator);
+
+    const { message, conversationId } = req.body;
+    const userId = req.headers['x-user-id'] || 'anonymous';
+    const userRole = req.headers['x-user-role'] || 'user';
+    const orgId = req.headers['x-org-id'];
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is required'
+      });
+    }
+
+    const result = await agent.processCommand(message, {
+      conversationId,
+      userId,
+      role: userRole,
+      orgId
+    });
+
+    res.json(result);
+
+  } catch (error) {
+    logger.error('Admin command failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/admin/tools
+ * Get available admin tools (respects RBAC)
+ */
+router.get('/admin/tools', async (req, res) => {
+  try {
+    const orchestrator = req.app.locals.orchestrator;
+    const agent = await ensureAdminAgentInitialized(orchestrator);
+
+    const userRole = req.headers['x-user-role'] || 'user';
+    const tools = await agent.loadToolsForRole(userRole);
+
+    // Group tools by category
+    const toolCategories = {
+      healthcare: [],
+      governance: [],
+      system: [],
+      other: []
+    };
+
+    for (const tool of tools) {
+      if (tool.name.includes('phi') || tool.name.includes('clinical') ||
+          tool.name.includes('knowledge') || tool.name.includes('gremlin') ||
+          tool.name.includes('policy') || tool.name.includes('intent')) {
+        toolCategories.healthcare.push(tool.name);
+      } else if (tool.name.includes('audit') || tool.name.includes('compliance') ||
+                 tool.name.includes('user') || tool.name.includes('session')) {
+        toolCategories.governance.push(tool.name);
+      } else if (tool.name.includes('cache') || tool.name.includes('health') ||
+                 tool.name.includes('llm') || tool.name.includes('feature')) {
+        toolCategories.system.push(tool.name);
+      } else {
+        toolCategories.other.push(tool.name);
+      }
+    }
+
+    res.json({
+      success: true,
+      totalTools: tools.length,
+      role: userRole,
+      categories: toolCategories,
+      tools: tools.map(t => ({
+        name: t.name,
+        description: t.description?.substring(0, 100)
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Failed to get admin tools:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/admin/schema/visualize
+ * Get schema visualization
+ */
+router.get('/admin/schema/visualize', async (req, res) => {
+  try {
+    const format = req.query.format || 'mermaid';
+    const scope = req.query.scope || 'all';
+
+    const orchestrator = req.app.locals.orchestrator;
+    const agent = await ensureAdminAgentInitialized(orchestrator);
+
+    // Call the visualize_schema tool directly
+    const { cosmosSchemaTools } = await import('../../healthcare/admin/tools/cosmos-schema-tools.js');
+    const visualizeTool = cosmosSchemaTools.find(t => t.name === 'visualize_schema');
+
+    const result = await visualizeTool.handler(orchestrator, {
+      format,
+      scope,
+      includeStats: true
+    });
+
+    res.json(result);
+
+  } catch (error) {
+    logger.error('Schema visualization failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================
+// HEALTHCARE AUTHENTICATION ROUTES
+// ============================================================
+
+/**
+ * Ensure Cosmos client and user service are initialized
+ * Uses orchestrator's Cosmos client if available, falls back to creating one
+ */
+async function ensureUserServiceInitialized(req) {
+  // Try to get Cosmos client from orchestrator first
+  if (!cosmosClient) {
+    const orchestrator = req?.app?.get('orchestrator');
+    if (orchestrator?.cosmosGremlinClient?.initialized) {
+      cosmosClient = orchestrator.cosmosGremlinClient;
+      logger.info('Using orchestrator Cosmos Gremlin Client for healthcare auth');
+    } else {
+      // Fallback: create our own client
+      try {
+        cosmosClient = new CosmosGremlinClient();
+        await cosmosClient.initialize();
+        logger.info('Cosmos Gremlin Client initialized for healthcare auth (standalone)');
+      } catch (error) {
+        logger.error('Failed to initialize Cosmos client:', error.message);
+        // Don't throw - return null so caller can handle gracefully
+        return null;
+      }
+    }
+  }
+
+  // Initialize user service with Cosmos client
+  if (!healthcareUserService && cosmosClient?.initialized) {
+    healthcareUserService = new HealthcareUserService(cosmosClient);
+    logger.info('Healthcare User Service initialized');
+  }
+
+  return healthcareUserService;
+}
+
+/**
+ * POST /api/healthcare/auth/login
+ * Authenticate user
+ */
+router.post('/auth/login', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.status(503).json({
+        success: false,
+        error: 'User service not available - Cosmos DB not connected'
+      });
+    }
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    const result = await userService.authenticate(email, password);
+
+    if (result.success) {
+      // Set session cookie
+      res.cookie('healthcare_session', result.sessionId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 8 * 60 * 60 * 1000 // 8 hours
+      });
+    }
+
+    res.json(result);
+
+  } catch (error) {
+    logger.error('Login failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/auth/logout
+ * Logout user
+ */
+router.post('/auth/logout', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    const sessionId = req.cookies?.healthcare_session || req.headers['x-session-id'];
+
+    if (userService && sessionId) {
+      userService.logout(sessionId);
+    }
+
+    res.clearCookie('healthcare_session');
+    res.json({ success: true });
+
+  } catch (error) {
+    logger.error('Logout failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/auth/session
+ * Validate current session
+ */
+router.get('/auth/session', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.status(503).json({
+        success: false,
+        error: 'User service not available'
+      });
+    }
+
+    const sessionId = req.cookies?.healthcare_session || req.headers['x-session-id'];
+
+    if (!sessionId) {
+      return res.json({ valid: false, error: 'No session' });
+    }
+
+    const result = userService.validateSession(sessionId);
+
+    if (result.valid) {
+      const persona = userService.getPersona(result.session.role);
+      res.json({
+        valid: true,
+        session: {
+          userId: result.session.userId,
+          email: result.session.email,
+          name: result.session.name,
+          role: result.session.role,
+          department: result.session.department,
+          persona: persona,
+          isProvider: userService.isProvider(result.session.role),
+          isPatient: userService.isPatient(result.session.role)
+        },
+        user: {
+          id: result.session.userId,
+          email: result.session.email,
+          name: result.session.name,
+          role: result.session.role,
+          department: result.session.department
+        }
+      });
+    } else {
+      res.json({ valid: false, error: result.error });
+    }
+
+  } catch (error) {
+    logger.error('Session check failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/auth/access
+ * Check if user has access to a page
+ */
+router.get('/auth/access', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.status(503).json({
+        success: false,
+        error: 'User service not available'
+      });
+    }
+
+    const sessionId = req.cookies?.healthcare_session || req.headers['x-session-id'];
+    const page = req.query.page;
+
+    if (!sessionId) {
+      return res.json({ hasAccess: false, reason: 'Not authenticated' });
+    }
+
+    const sessionResult = userService.validateSession(sessionId);
+
+    if (!sessionResult.valid) {
+      return res.json({ hasAccess: false, reason: sessionResult.error });
+    }
+
+    const hasAccess = userService.hasAccess(sessionResult.session.role, page);
+
+    res.json({
+      hasAccess,
+      role: sessionResult.session.role,
+      reason: hasAccess ? 'Access granted' : 'Insufficient permissions'
+    });
+
+  } catch (error) {
+    logger.error('Access check failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/auth/seed
+ * Seed demo users (dev only)
+ */
+router.post('/auth/seed', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.status(503).json({
+        success: false,
+        error: 'User service not available - Cosmos DB not connected'
+      });
+    }
+
+    const created = await userService.seedDemoUsers();
+
+    res.json({
+      success: true,
+      message: 'Demo users seeded',
+      created: created.length,
+      users: created
+    });
+
+  } catch (error) {
+    logger.error('Seed users failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/auth/debug
+ * Debug endpoint - check Cosmos and list users (dev only)
+ */
+router.get('/auth/debug', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.json({
+        success: false,
+        cosmosConnected: false,
+        error: 'Cosmos not connected'
+      });
+    }
+
+    // Direct query to check what's in Cosmos
+    const allUsers = await userService.cosmos.query(`g.V().hasLabel('HealthcareUser').valueMap(true)`);
+
+    res.json({
+      success: true,
+      cosmosConnected: true,
+      userCount: allUsers.length,
+      users: allUsers.map(u => ({
+        id: u.id,
+        email: u.email?.[0] || u.email,
+        name: u.name?.[0] || u.name,
+        role: u.role?.[0] || u.role,
+        hasPasswordHash: !!(u.passwordHash?.[0] || u.passwordHash)
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Debug endpoint error:', error);
+    res.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/auth/users
+ * List all users (admin only)
+ */
+router.get('/auth/users', async (req, res) => {
+  try {
+    const userService = await ensureUserServiceInitialized(req);
+
+    if (!userService) {
+      return res.status(503).json({
+        success: false,
+        error: 'User service not available'
+      });
+    }
+
+    // Check admin access
+    const sessionId = req.cookies?.healthcare_session || req.headers['x-session-id'];
+    if (sessionId) {
+      const sessionResult = userService.validateSession(sessionId);
+      if (!sessionResult.valid || sessionResult.session.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+      }
+    }
+
+    const users = await userService.listUsers();
+
+    res.json({
+      success: true,
+      count: users.length,
+      users
+    });
+
+  } catch (error) {
+    logger.error('List users failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+export default (orchestrator) => {
+  router.orchestrator = orchestrator;
+  return router;
+};
