@@ -49,6 +49,24 @@ export {
   IntentModes
 } from '../database/schema/healthcare-graph-schema.js';
 
+// Correctness Assurance (Phase 9)
+export {
+  createCorrectnessStack,
+  CorrectnessEvaluator,
+  GroundTruthRegistry,
+  AssertionEngine,
+  CalibrationFramework,
+  ExpertReviewWorkflow,
+  OutcomeTracker,
+  FeedbackAnalyzer,
+  CorrectnessStatus,
+  AssertionTypes,
+  AssertionSeverity,
+  ReviewStatus,
+  ReviewDecision,
+  OutcomeType
+} from '../core/correctness/index.js';
+
 /**
  * Create a fully configured healthcare intelligence stack
  * Includes ReAct orchestrator for dynamic reasoning
@@ -108,6 +126,22 @@ export async function createHealthcareStack(options = {}) {
     recipeEngine.setLLMService(options.llmService);
   }
 
+  // Initialize correctness stack if requested
+  let correctnessStack = null;
+  if (options.enableCorrectness !== false) {
+    try {
+      const { createCorrectnessStack } = await import('../core/correctness/index.js');
+      correctnessStack = await createCorrectnessStack({
+        groundTruthOptions: options.groundTruthOptions,
+        triggerConfig: options.reviewTriggerConfig,
+        calibrationOptions: options.calibrationOptions,
+        ...options.correctnessOptions
+      });
+    } catch (e) {
+      console.warn('Could not initialize correctness stack:', e.message);
+    }
+  }
+
   return {
     graphService,
     policyEngine,
@@ -115,6 +149,7 @@ export async function createHealthcareStack(options = {}) {
     recipeEngine,
     intentRouter,
     orchestrator,
+    correctnessStack,
 
     /**
      * Process a natural language request through ReAct loop
@@ -181,8 +216,21 @@ export async function createHealthcareStack(options = {}) {
       };
     },
 
+    /**
+     * Evaluate decision artifact for correctness
+     */
+    async evaluateCorrectness(artifact, options = {}) {
+      if (!correctnessStack) {
+        return { success: false, error: 'Correctness stack not initialized' };
+      }
+      return correctnessStack.evaluate(artifact, options);
+    },
+
     // Shutdown
     async close() {
+      if (correctnessStack) {
+        await correctnessStack.shutdown();
+      }
       await graphService.close();
     }
   };

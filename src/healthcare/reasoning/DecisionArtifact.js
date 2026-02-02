@@ -75,6 +75,9 @@ export class DecisionArtifact {
       version: 1,
       changes: []
     };
+
+    // Correctness assurance (Phase 9)
+    this.correctness = null;
   }
 
   /**
@@ -183,6 +186,37 @@ export class DecisionArtifact {
   }
 
   /**
+   * Set correctness envelope (Phase 9)
+   */
+  setCorrectness(correctnessEnvelope) {
+    this.correctness = {
+      envelopeId: correctnessEnvelope.header?.envelopeId,
+      status: correctnessEnvelope.payload?.assessment?.status,
+      canProceed: correctnessEnvelope.payload?.verdict?.canProceed,
+      confidence: correctnessEnvelope.payload?.assessment?.metrics?.overallConfidence,
+      requiresReview: correctnessEnvelope.payload?.reviewRequirement?.required,
+      reviewStatus: correctnessEnvelope.payload?.reviewRequirement?.reviewStatus,
+      assertions: {
+        total: correctnessEnvelope.payload?.assessment?.metrics?.totalAssertions,
+        passed: correctnessEnvelope.payload?.assessment?.metrics?.passedAssertions,
+        failed: correctnessEnvelope.payload?.assessment?.metrics?.failedAssertions
+      },
+      warnings: correctnessEnvelope.payload?.verdict?.warnings,
+      blockedBy: correctnessEnvelope.payload?.verdict?.blockedBy,
+      evaluatedAt: correctnessEnvelope._meta?.evaluatedAt
+    };
+    return this;
+  }
+
+  /**
+   * Check if correctness allows proceeding
+   */
+  correctnessAllowsProceeding() {
+    if (!this.correctness) return true; // No correctness check performed
+    return this.correctness.canProceed === true;
+  }
+
+  /**
    * Add a reason using the builder
    */
   addReason(type, source, description, options = {}) {
@@ -247,6 +281,7 @@ export class DecisionArtifact {
       policyTrace: this.policyTrace,
       knowledgeUsed: this.knowledgeUsed,
       recipeExecution: this.recipeExecution,
+      correctness: this.correctness,
       conditions: this.conditions,
       nextSteps: this.nextSteps,
       audit: this.audit
@@ -401,6 +436,7 @@ export class DecisionArtifact {
     artifact.policyTrace = json.policyTrace || [];
     artifact.knowledgeUsed = json.knowledgeUsed || [];
     artifact.recipeExecution = json.recipeExecution;
+    artifact.correctness = json.correctness;
     artifact.conditions = json.conditions || [];
     artifact.nextSteps = json.nextSteps || [];
     artifact.audit = json.audit || {};
