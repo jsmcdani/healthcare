@@ -1,12 +1,13 @@
 /**
  * LLMParser - Bounded LLM fallback for intent parsing
- * Uses cachedLLMCall - the proper LLM abstraction layer
+ * Uses cachedLLMCall with outputSchema - Claude Structured Outputs
  */
 
 import { Logger } from '../../../utils/logger.js';
 import { cachedLLMCall } from '../../../utils/cachedLLM.js';
 import { getIntentRegistry } from '../IntentRegistry.js';
 import { createSuccessEnvelope, createClarificationEnvelope, ClarificationReason, ParameterSource } from '../contracts/IntentParseEnvelope.js';
+import { NLSIntentClassificationSchema } from '../schemas/NLSIntentClassificationSchema.js';
 
 const logger = new Logger('LLMParser');
 
@@ -16,13 +17,10 @@ ALLOWED INTENTS:
 {{INTENT_LIST}}
 
 RULES:
-1. Output valid JSON matching the schema
-2. Select intentId from the allowed list only - DO NOT invent new intents
-3. If unsure, set requiresClarification: true
-4. Extract parameters only if clearly present
-
-OUTPUT JSON:
-{"intentId": "string or null", "confidence": 0.0-1.0, "parameters": [{"name": "string", "value": "any", "confidence": number}], "requiresClarification": boolean, "reasoning": "brief explanation"}`;
+1. Select intentId from the allowed list only - DO NOT invent new intents
+2. If unsure or intent unclear, set requiresClarification: true and intentId: null
+3. Extract parameters (patientId, condition, timeRange, urgency) only if clearly present in input
+4. Set confidence based on how clear the user's intent is`;
 
 export class LLMParser {
   constructor() {
@@ -66,18 +64,21 @@ export class LLMParser {
         {
           temperature: 0,
           maxTokens: 500,
+          outputSchema: NLSIntentClassificationSchema, // Claude Structured Outputs - guaranteed valid JSON
           cachePrefix: 'nls:intent-parse',
           cacheTTL: 1800
         }
       );
 
       const parseTimeMs = Date.now() - startTime;
-      const parsed = this._parseResponse(result);
+      // With outputSchema, result.data is already parsed and validated
+      const parsed = result?.data || result;
 
-      if (!parsed) {
+      if (!parsed || typeof parsed !== 'object') {
         return this._createFallback(text, parseTimeMs);
       }
 
+      // Validate intentId is from registry (schema enforces enum, but double-check)
       if (parsed.intentId && !this.registry.isKnown(parsed.intentId)) {
         logger.warn(`LLM returned unknown intent: ${parsed.intentId}`);
         return this._createFallback(text, parseTimeMs);
@@ -91,24 +92,6 @@ export class LLMParser {
     } catch (error) {
       logger.error('LLM parse error:', error.message);
       return this._createFallback(text, Date.now() - startTime);
-    }
-  }
-
-  _parseResponse(response) {
-    try {
-      let parsed = response?.data || response;
-      if (typeof parsed === 'string') {
-        const jsonMatch = parsed.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-      if (!parsed || typeof parsed !== 'object') return null;
-      if (typeof parsed.confidence !== 'number') parsed.confidence = 0.5;
-      if (!Array.isArray(parsed.parameters)) parsed.parameters = [];
-      if (typeof parsed.requiresClarification !== 'boolean') parsed.requiresClarification = !parsed.intentId;
-      return parsed;
-    } catch {
-      return null;
     }
   }
 

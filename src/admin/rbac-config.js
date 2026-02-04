@@ -335,7 +335,33 @@ export const TOOL_PERMISSIONS = {
   list_healthcare_recipes: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true },
 
   // Healthcare Builder - Policy Reads
-  list_policies: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true }
+  list_policies: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true },
+
+  // ========================================
+  // Cosmos DB Gremlin Schema Tools (v2)
+  // ========================================
+
+  // Schema Data Management - CRITICAL (can clear data)
+  clear_graph_data: { level: PERMISSION_LEVELS.CRITICAL, orgScoped: false },
+
+  // Schema Data Management - ELEVATED (can load data)
+  load_synthetic_data: { level: PERMISSION_LEVELS.ELEVATED, orgScoped: true },
+
+  // Schema Queries - STANDARD (read/write within scope)
+  gremlin_query: { level: PERMISSION_LEVELS.STANDARD, orgScoped: true },
+  validate_graph_schema: { level: PERMISSION_LEVELS.STANDARD, orgScoped: true },
+  query_gremlin_database: { level: PERMISSION_LEVELS.STANDARD, orgScoped: true },
+
+  // Multi-database Management - ELEVATED (can connect to different DBs)
+  list_gremlin_databases: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: false },
+  connect_gremlin_database: { level: PERMISSION_LEVELS.ELEVATED, orgScoped: false },
+  compare_gremlin_databases: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: false },
+
+  // Schema Reads - READ_ONLY
+  get_v2_schema_stats: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true },
+  visualize_schema: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true },
+  get_schema_definition: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: false },
+  compare_schema_versions: { level: PERMISSION_LEVELS.READ_ONLY, orgScoped: true }
 };
 
 /**

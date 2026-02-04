@@ -13,9 +13,70 @@ import { Logger } from '../utils/logger.js';
 const { driver, structure } = Gremlin;
 const { Graph } = structure;
 
+// Static registry for multiple database connections
+const clientRegistry = new Map();
+
 export class CosmosGremlinClient {
+  /**
+   * Get or create a client for a specific database alias
+   * @param {string} alias - Database alias (e.g., 'primary', 'secondary', 'synthetic')
+   * @param {object} config - Optional config override
+   * @returns {CosmosGremlinClient}
+   */
+  static getClient(alias = 'primary', config = {}) {
+    if (clientRegistry.has(alias)) {
+      return clientRegistry.get(alias);
+    }
+
+    // Default configs for known aliases
+    const aliasConfigs = {
+      primary: {
+        endpoint: process.env.COSMOS_GREMLIN_ENDPOINT || 'ws://localhost:8901/gremlin',
+        database: process.env.COSMOS_DATABASE || 'metalligent',
+        container: process.env.COSMOS_CONTAINER || 'healthcare-graph'
+      },
+      secondary: {
+        endpoint: process.env.COSMOS_GREMLIN_ENDPOINT_SECONDARY || 'ws://localhost:8902/gremlin',
+        database: process.env.COSMOS_DATABASE_SECONDARY || 'metalligent-dev',
+        container: process.env.COSMOS_CONTAINER_SECONDARY || 'healthcare-synthetic'
+      }
+    };
+
+    const finalConfig = { ...aliasConfigs[alias], ...config, alias };
+    const client = new CosmosGremlinClient(finalConfig);
+    clientRegistry.set(alias, client);
+    return client;
+  }
+
+  /**
+   * List all registered database connections
+   */
+  static listConnections() {
+    const connections = [];
+    for (const [alias, client] of clientRegistry.entries()) {
+      connections.push({
+        alias,
+        endpoint: client.config.endpoint,
+        database: client.config.database,
+        container: client.config.container,
+        initialized: client.initialized
+      });
+    }
+    return connections;
+  }
+
+  /**
+   * Close all connections
+   */
+  static async closeAll() {
+    for (const [alias, client] of clientRegistry.entries()) {
+      await client.close();
+    }
+    clientRegistry.clear();
+  }
   constructor(config = {}) {
     this.logger = new Logger('CosmosGremlinClient');
+    this.alias = config.alias || 'default';
 
     // Environment-based configuration
     this.config = {
@@ -24,11 +85,12 @@ export class CosmosGremlinClient {
       primaryKey: config.primaryKey || process.env.COSMOS_PRIMARY_KEY || 'C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==', // Emulator key
       database: config.database || process.env.COSMOS_DATABASE || 'metalligent',
       container: config.container || process.env.COSMOS_CONTAINER || 'healthcare-graph',
+      alias: this.alias,
 
       // Connection settings
       traversalSource: 'g',
       rejectUnauthorized: config.rejectUnauthorized ?? false, // False for local emulator (self-signed cert)
-      mimeType: 'application/vnd.gremlin-v2.0+json'
+      mimeType: 'application/vnd.gremlin-v3.0+json'
     };
 
     this.client = null;

@@ -1,0 +1,76 @@
+{
+  "appId": "healthcare",
+  "version": "1.0.0",
+
+  "intents": [
+    {
+      "id": "hc:patient-summary",
+      "description": "Retrieve and summarize patient information with clinical context",
+      "triggers": ["/patient", "/patient-summary", "/summary"],
+      "patterns": [
+        { "regex": "(?:show|get|view).*patient.*(?:summary|info|details)?", "weight": 0.9 },
+        { "regex": "patient\\s+(?:overview|status|record)", "weight": 0.9 },
+        { "regex": "(?:who\\s+is|look\\s+up)\\s+(?:patient\\s+)?(?:MRN|P)\\d+", "weight": 0.95 }
+      ],
+      "recipe": "patient-summary",
+      "confidenceThreshold": 0.8,
+      "mode": "CLINICAL_DECISION_SUPPORT"
+    },
+    {
+      "id": "hc:treatment-recommendation",
+      "description": "Provide evidence-based treatment recommendations with clinical guidelines",
+      "triggers": ["/treatment", "/treat", "/therapy", "/recommend"],
+      "patterns": [
+        { "regex": "(?:treatment|therapy)\\s+(?:for|recommendation)", "weight": 0.95 },
+        { "regex": "how\\s+(?:to|should)\\s+treat", "weight": 0.9 },
+        { "regex": "(?:what|recommend).*(?:treatment|therapy|medication)", "weight": 0.9 },
+        { "regex": "(?:diabetes|hypertension|copd|depression).*(?:treatment|management)", "weight": 0.85 }
+      ],
+      "recipe": "treatment-recommendation",
+      "confidenceThreshold": 0.8,
+      "mode": "CLINICAL_DECISION_SUPPORT"
+    },
+    {
+      "id": "hc:care-gaps",
+      "description": "Identify care gaps and overdue screenings for a patient",
+      "triggers": ["/care-gaps", "/gaps", "/screenings"],
+      "patterns": [
+        { "regex": "care\\s+gaps?", "weight": 0.95 },
+        { "regex": "(?:overdue|missing|needed)\\s+(?:screening|test|exam)", "weight": 0.9 },
+        { "regex": "(?:what|which).*(?:screenings?|tests?).*(?:due|needed)", "weight": 0.85 }
+      ],
+      "recipe": "care-gap-analysis",
+      "confidenceThreshold": 0.8,
+      "mode": "CLINICAL_DECISION_SUPPORT"
+    },
+    {
+      "id": "hc:emergency-triage",
+      "description": "Emergency triage assessment for urgent situations",
+      "triggers": ["/emergency", "/triage", "/urgent"],
+      "patterns": [
+        { "regex": "(?:emergency|urgent|critical|stat)\\s+(?:triage|assessment)?", "weight": 0.95 },
+        { "regex": "(?:code\\s+blue|cardiac\\s+arrest|chest\\s+pain|difficulty\\s+breathing)", "weight": 0.98 },
+        { "regex": "(?:severe|acute|sudden)\\s+(?:pain|symptoms)", "weight": 0.9 }
+      ],
+      "recipe": "emergency-triage",
+      "confidenceThreshold": 0.6,
+      "mode": "EMERGENCY_TRIAGE"
+    },
+    {
+      "id": "hc:help",
+      "description": "Show available healthcare commands",
+      "triggers": ["/help", "/commands", "/?"],
+      "patterns": [
+        { "regex": "(?:what|show|list).*(?:can\\s+you\\s+do|commands?|help)", "weight": 0.9 },
+        { "regex": "help", "weight": 0.8 }
+      ],
+      "recipe": "show-help",
+      "confidenceThreshold": 0.8
+    }
+  ],
+
+  "fallback": {
+    "message": "I specialize in clinical decision support. Try commands like /patient MRN-12345, /treatment diabetes type 2, or /care-gaps MRN-12345. Type /help for all available commands.",
+    "suggestions": ["/patient MRN-12345", "/treatment diabetes", "/care-gaps MRN-12345", "/help"]
+  }
+}
