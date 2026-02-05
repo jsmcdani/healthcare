@@ -2,91 +2,56 @@
 
 ## Overview
 
-The Healthcare Intent Classification System uses **Zod** for deterministic, type-safe validation to classify user requests into structured intents. This document explains how the system works and why it uses deterministic validation.
+The Healthcare Intent Classification System classifies user requests into structured healthcare intents using Zod for deterministic, type-safe validation. This document explains how all the components work together.
 
 ---
 
 ## Why Zod for Deterministic Validation
 
-### The Problem with Non-Deterministic Classification
+In healthcare, non-deterministic behavior is dangerous. Zod provides **deterministic validation** - the same input ALWAYS produces the same output.
 
-In healthcare, non-deterministic behavior is dangerous:
-- LLMs can return different results for the same input
-- Runtime type coercion can silently transform data
-- Implicit validation can miss invalid states
-
-### How Zod Solves This
-
-Zod provides **parse, don't validate** semantics:
+### Parse, Don't Validate
 
 ```javascript
-// Traditional validation (non-deterministic)
+// Traditional validation - non-deterministic, data is still "any"
 if (typeof data.patientId === 'string') {
-  // data is still "any" type - runtime could fail later
+  // data could still fail later at runtime
 }
 
-// Zod validation (deterministic)
-const result = PatientSchema.safeParse(data);
+// Zod - deterministic, returns typed data
+const result = Schema.safeParse(data);
 if (result.success) {
   // result.data is GUARANTEED to match schema
-  // Same input ALWAYS produces same output
+  // Same input ALWAYS produces same output or same error
 }
 ```
 
-**Key Zod Benefits:**
+### Key Benefits
 
-1. **Deterministic** - Same input always produces same output
-2. **Fail-fast** - Invalid data throws immediately with clear errors
+1. **Deterministic** - Same input → same output, always
+2. **Fail-fast** - Invalid data throws immediately with detailed errors
 3. **Type inference** - TypeScript types generated from schemas
 4. **Composable** - Build complex schemas from simple ones
-5. **No runtime surprises** - Schema IS the runtime validation
-
-### Zod Schema Example
-
-```javascript
-import { z } from 'zod';
-
-// Define schema
-const ParameterSchema = z.object({
-  name: z.string(),
-  value: z.unknown(),
-  source: z.enum(['explicit', 'inferred', 'default', 'context']),
-  confidence: z.number().min(0).max(1)
-});
-
-// Parse (throws on invalid)
-const param = ParameterSchema.parse({
-  name: 'patientId',
-  value: 'P001',
-  source: 'inferred',
-  confidence: 0.95
-});
-
-// Safe parse (returns result object)
-const result = ParameterSchema.safeParse(input);
-if (!result.success) {
-  console.log(result.error.errors);  // Detailed error info
-}
-```
+5. **Self-documenting** - Schema IS the specification
 
 ---
 
-## Core Principles
+## Core Principles (P1-P5)
 
 ### P1: Closed-World Intent Universe
 
-The system only recognizes intents defined in rule tables. Any unrecognized intent is rejected with `OUTSIDE_ALLOWLIST`.
+Only intents defined in rule tables are valid. Unknown intents return `OUTSIDE_ALLOWLIST`.
 
-**Why:** In healthcare, executing unknown intents is dangerous. The closed-world assumption ensures only validated, tested intents can execute.
+**Why:** In healthcare, executing unknown intents is dangerous.
 
-**How Zod enforces it:**
+**Implementation:**
 ```javascript
-// IntentRegistry uses Zod to validate intentId exists
+// IntentRegistry checks against rule tables
 if (!registry.isKnown(intentId)) {
   return createOutsideAllowlistEnvelope({
     clarification: {
       reason: ClarificationReason.OUTSIDE_ALLOWLIST,
-      message: 'Command not recognized'
+      message: 'Command not recognized. Use /help for available commands.'
     }
   });
 }
@@ -94,230 +59,416 @@ if (!registry.isKnown(intentId)) {
 
 ### P2: Deterministic-First Resolution
 
-Intent classification follows a strict tier hierarchy:
+Classification follows strict tier hierarchy - deterministic methods first:
 
-| Tier | Method | Confidence | Deterministic? |
-|------|--------|------------|----------------|
-| **1** | Slash command triggers | 0.95-1.0 | Yes |
-| **2** | Regex pattern matching | 0.6-0.95 | Yes |
-| **3** | LLM classification | 0.5-0.9 | No |
+| Tier | Method | Confidence | Deterministic |
+|------|--------|------------|---------------|
+| 1 | Slash command triggers | 0.95-1.0 | Yes |
+| 2 | Regex pattern matching | 0.6-0.95 | Yes |
+| 3 | LLM classification | 0.5-0.9 | No |
 
-**How it works:**
-
-```
-Input: "/staging P001"
-         │
-         ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │ TIER 1: Trigger Match                                   │
-   │                                                         │
-   │ for (trigger of intent.triggers) {                     │
-   │   if (input.startsWith(trigger)) {                     │
-   │     // MATCH! confidence = 0.95                        │
-   │     // Extract remaining text for parameters           │
-   │     return { intentId, confidence: 0.95, tier: 1 }    │
-   │   }                                                    │
-   │ }                                                       │
-   └─────────────────────────────────────────────────────────┘
-         │ No match
-         ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │ TIER 2: Pattern Match                                   │
-   │                                                         │
-   │ for (pattern of intent.patterns) {                     │
-   │   const regex = new RegExp(pattern.regex, 'i');        │
-   │   const match = input.match(regex);                    │
-   │   if (match) {                                         │
-   │     // Extract named groups as parameters              │
-   │     // confidence = pattern.weight (0.6-0.95)          │
-   │     matches.push({ intentId, confidence, tier: 2 })   │
-   │   }                                                    │
-   │ }                                                       │
-   │ // Return highest confidence match                      │
-   └─────────────────────────────────────────────────────────┘
-         │ No match (and allowLLMParse === true)
-         ▼
-   ┌─────────────────────────────────────────────────────────┐
-   │ TIER 3: LLM Classification (Optional)                   │
-   │                                                         │
-   │ if (constraints.allowLLMParse) {                       │
-   │   // Send to LLM with intent descriptions              │
-   │   // confidence = LLM's reported confidence            │
-   │   // NON-DETERMINISTIC - same input may vary           │
-   │ }                                                       │
-   └─────────────────────────────────────────────────────────┘
-```
-
-**Constraint to disable LLM:**
+**Implementation:**
 ```javascript
-const request = createDeterministicRequest(
-  'staging readiness for P001',
-  { userId: 'doc-123' }
-);
+// Tier 1: Check triggers first (highest priority, deterministic)
+const triggerMatch = this._matchTrigger(text);  // "/staging" → confidence 0.95
+if (triggerMatch) return triggerMatch;
+
+// Tier 2: Check patterns (deterministic)
+const patternMatches = this._matchPatterns(text);  // regex with named groups
+if (patternMatches.length > 0) return bestMatch(patternMatches);
+
+// Tier 3: LLM only if allowed and tiers 1-2 failed (non-deterministic)
+if (constraints.allowLLMParse) {
+  return llmParser.classify(text);
+}
+```
+
+**Disable LLM for pure deterministic:**
+```javascript
+const request = createDeterministicRequest(rawText, context);
 // Sets constraints.allowLLMParse = false
-// Only Tier 1-2 will be used (deterministic)
 ```
 
 ### P3: Clarify, Don't Guess
 
-When the system is uncertain, it asks for clarification instead of guessing.
+When uncertain, ask for clarification instead of guessing.
 
-**Triggers for clarification:**
+**Triggers:**
 - Multiple intents match with similar confidence
 - Required parameter missing
 - Confidence below threshold
 - Intent not in allowlist
 
-**How Zod enforces it:**
+**Implementation:**
 ```javascript
-// ClarificationSchema ensures proper structure
-const ClarificationSchema = z.object({
-  reason: z.enum([
-    'ambiguous_intent',
-    'missing_required_parameter',
-    'multiple_intent_matches',
-    'low_confidence',
-    'outside_allowlist'
-  ]),
-  message: z.string(),
-  options: z.array(ClarificationOptionSchema).optional(),
-  missingParameters: z.array(z.string()).optional()
-});
+if (topMatch.confidence < THRESHOLD || closeMatches.length > 0) {
+  return createClarificationEnvelope({
+    clarification: {
+      reason: ClarificationReason.AMBIGUOUS_INTENT,
+      message: 'Which did you mean?',
+      options: topIntents
+    }
+  });
+}
 ```
 
 ### P4: Dual Confidence Model
 
 Two separate confidence scores:
 
-| Score | Meaning | Range |
-|-------|---------|-------|
-| `parseConfidence` | How confident we understood what the user meant | 0-1 |
-| `decisionConfidence` | How appropriate this action is for the clinical context | 0-1 |
+| Score | Purpose |
+|-------|---------|
+| `parseConfidence` | How confident we understood what user meant (0-1) |
+| `decisionConfidence` | How appropriate this action is clinically (0-1, optional) |
 
 **Example:**
 ```
-User: "Give patient insulin"
+Input: "Give patient insulin"
 
-parseConfidence: 0.95
-  → We clearly understood they want to give insulin
-
-decisionConfidence: 0.3
-  → But this patient is not diabetic, so insulin is inappropriate
-```
-
-**Zod schema:**
-```javascript
-const IntentParsePayloadSchema = z.object({
-  // ...
-  parseConfidence: z.number().min(0).max(1),
-  decisionConfidence: z.number().min(0).max(1).optional()
-});
+parseConfidence: 0.95    → We understood: give insulin
+decisionConfidence: 0.3  → But patient isn't diabetic
 ```
 
 ### P5: Auditability and Version Pinning
 
-Every parse result includes a trace for reproducibility.
+Every parse includes trace for reproducibility.
 
-**Why:** For clinical audits, we need to reproduce exactly how a classification was made.
-
-**Trace schema:**
+**Implementation:**
 ```javascript
-const ParseTraceSchema = z.object({
-  parserUsed: z.enum(['rule-based', 'llm', 'hybrid', 'confirmed']),
-  tier: z.number().int().min(1).max(3).optional(),
-  ruleMatches: z.array(RuleMatchSchema).default([]),
-  llmInvoked: z.boolean().default(false),
-  parseTimeMs: z.number().int(),
-  ruleTableVersion: z.string().optional()  // e.g., "clinical-intents.json@1.0.0"
-});
+trace: {
+  parserUsed: 'rule-based',
+  tier: 2,
+  ruleMatches: [{ pattern: 'staging\\s+readiness', confidence: 0.85 }],
+  llmInvoked: false,
+  parseTimeMs: 12,
+  ruleTableVersion: 'clinical-intents.json@1.0.0'  // P5: version for audit
+}
 ```
 
-**Using version for audit:**
+**Audit use case:**
 ```javascript
-// 6 months later, auditor asks: "Why did the system classify this as staging?"
-
-// We can reproduce exactly:
+// 6 months later: "Why did system classify this as staging?"
+// Load same rule version, get same result (deterministic)
 const rules = await loadRuleTables({ version: 'clinical-intents.json@1.0.0' });
-const result = parser.parse(originalInput, originalContext);
-// Same result as 6 months ago (deterministic)
 ```
 
 ---
 
-## Zod Contract Schemas
+## System Architecture - How It All Works Together
 
-### IntentParseRequestEnvelope (Input)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USER INPUT                                      │
+│                    "staging readiness for patient P001"                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     INTENT PARSE REQUEST ENVELOPE                            │
+│                                                                              │
+│  Created by: createSimpleRequest(rawText, context, constraints)             │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ header: { schemaId: 'intent.parse.request', ... }                      │ │
+│  │ payload: {                                                              │ │
+│  │   rawText: "staging readiness for patient P001"                        │ │
+│  │   context: { userId, orgId, patientId, clinicalMode }                  │ │
+│  │   constraints: { allowLLMParse: true, forceConfirm: false }            │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  Zod validates: IntentParseRequestEnvelopeSchema.parse(envelope)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           INTENT REGISTRY                                    │
+│                                                                              │
+│  Loads from: rules/clinical-intents.json                                    │
+│  Validates with: RuleTableSchema (Zod)                                      │
+│  Caches for: 5 minutes                                                      │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ Methods:                                                                │ │
+│  │   isKnown(intentId) → boolean                    [P1: closed-world]    │ │
+│  │   getIntent(intentId) → IntentDefinition                               │ │
+│  │   getIntentByTrigger('/staging') → IntentDefinition                    │ │
+│  │   validateParameters(intentId, params) → Zod result                    │ │
+│  │   getMissingRequired(intentId, params) → string[]                      │ │
+│  │   getRuleTableVersion() → string                 [P5: audit]           │ │
+│  │   getAllIntents() → IntentDefinition[]                                 │ │
+│  │   getIntentsByFamily('clinical') → IntentDefinition[]                  │ │
+│  │   getIntentsByDomain('staging') → IntentDefinition[]                   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  Each intent has Zod parameterSchema built from rule definition             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          RULE-BASED PARSER                                   │
+│                                                                              │
+│  TIER 1: Trigger Match (confidence: 0.95)                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ for (trigger of intent.triggers) {           // ["/staging", "/staging-readiness"]
+│  │   if (text.startsWith(trigger)) {                                      │ │
+│  │     remaining = text.substring(trigger.length);  // " P001"            │ │
+│  │     params = extractEntities(remaining);         // { patientId: P001 }│ │
+│  │     return { intentId, confidence: 0.95, tier: 1 };                    │ │
+│  │   }                                                                    │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                     │                                        │
+│                                     ▼ (no trigger match)                     │
+│  TIER 2: Pattern Match (confidence: from pattern.weight)                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ for (pattern of intent.patterns) {                                      │ │
+│  │   // pattern.regex: "staging\\s+readiness\\s+(?<patientId>[A-Z0-9-]+)" │ │
+│  │   // pattern.weight: 0.85                                              │ │
+│  │   const match = text.match(new RegExp(pattern.regex, 'i'));            │ │
+│  │   if (match) {                                                         │ │
+│  │     params = match.groups;  // { patientId: "P001" }                   │ │
+│  │     matches.push({ intentId, confidence: pattern.weight, tier: 2 });   │ │
+│  │   }                                                                    │ │
+│  │ }                                                                       │ │
+│  │ return highestConfidenceMatch;                                          │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                     │                                        │
+│                                     ▼ (no pattern match, LLM allowed)        │
+│  TIER 3: LLM Classification (non-deterministic)                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ if (constraints.allowLLMParse) {                                        │ │
+│  │   return llmParser.classify(text, intentDescriptions);                  │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PARAMETER VALIDATION                                 │
+│                                                                              │
+│  Registry validates parameters with Zod:                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ const validation = registry.validateParameters(intentId, params);       │ │
+│  │                                                                         │ │
+│  │ if (!validation.isValid) {                                              │ │
+│  │   return createClarificationEnvelope({                                  │ │
+│  │     clarification: {                                                    │ │
+│  │       reason: MISSING_REQUIRED_PARAMETER,                               │ │
+│  │       missingParameters: validation.missingFields                       │ │
+│  │     }                                                                   │ │
+│  │   });                                                                   │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       INTENT PARSE ENVELOPE (Output)                         │
+│                                                                              │
+│  Created by: createSuccessEnvelope() or createClarificationEnvelope()       │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ header: { schemaId: 'intent.parse', ... }                              │ │
+│  │ payload: {                                                              │ │
+│  │   intentId: "clinical.staging.readiness"                               │ │
+│  │   intentFamily: "clinical"                                             │ │
+│  │   parameters: [{                                                        │ │
+│  │     name: "patientId",                                                  │ │
+│  │     value: "P001",                                                      │ │
+│  │     source: "inferred",        // explicit|inferred|default|context    │ │
+│  │     confidence: 0.95                                                    │ │
+│  │   }]                                                                    │ │
+│  │   parseConfidence: 0.85        // P4: how sure we understood           │ │
+│  │   decisionConfidence: null     // P4: clinical appropriateness         │ │
+│  │   requiresClarification: false                                         │ │
+│  │   originalText: "staging readiness for patient P001"                   │ │
+│  │   trace: {                                                              │ │
+│  │     parserUsed: "rule-based",                                           │ │
+│  │     tier: 2,                                                            │ │
+│  │     parseTimeMs: 12,                                                    │ │
+│  │     ruleTableVersion: "clinical-intents.json@1.0.0"  // P5             │ │
+│  │   }                                                                     │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  Zod validates: IntentParseEnvelopeSchema.parse(envelope)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     │ (if requiresClarification)
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      INTENT CONFIRM ENVELOPE                                 │
+│                                                                              │
+│  User confirms after clarification                                          │
+│  Created by: createUserConfirm() or createAutoConfirm()                     │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ header: { schemaId: 'intent.confirm', ... }                            │ │
+│  │ payload: {                                                              │ │
+│  │   parseEnvelopeId: "550e8400-e29b-41d4-a716-446655440000"  // UUID     │ │
+│  │   confirmedIntentId: "clinical.staging.readiness"                      │ │
+│  │   confirmedParameters: [{                                               │ │
+│  │     name: "patientId",                                                  │ │
+│  │     value: "P001",                                                      │ │
+│  │     userModified: false        // true if user changed parsed value    │ │
+│  │   }]                                                                    │ │
+│  │   userAcknowledged: true       // P3: explicit consent                 │ │
+│  │   confirmationSource: "user_selection"  // or user_typed, system_auto  │ │
+│  │ }                                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  Zod validates: IntentConfirmEnvelopeSchema.parse(envelope)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+                          ┌─────────────────┐
+                          │ Recipe Executor │
+                          │  (downstream)   │
+                          └─────────────────┘
+```
 
-What goes INTO classification.
+---
+
+## Zod Schemas - Complete Definitions
+
+### IntentParseRequestEnvelope
 
 ```javascript
-// Schema definition
+import { z } from 'zod';
+
+// Clinical modes
+const ClinicalModeSchema = z.enum([
+  'standard',
+  'emergency_triage',
+  'phi_protection',
+  'medication_safety',
+  'staging_readiness'
+]).default('standard');
+
+// Request context
+const RequestContextSchema = z.object({
+  userId: z.string().optional(),
+  orgId: z.string().optional(),
+  patientId: z.string().optional(),
+  sessionId: z.string().optional(),
+  previousIntentId: z.string().optional(),
+  clinicalMode: ClinicalModeSchema,
+  timezone: z.string().optional(),
+  locale: z.string().default('en-US')
+}).default({});
+
+// Parsing constraints
+const RequestConstraintsSchema = z.object({
+  allowLLMParse: z.boolean().default(true),      // P2: allow tier 3?
+  forceConfirm: z.boolean().default(false),       // P3: always confirm?
+  maxParseTimeMs: z.number().int().min(100).max(30000).default(5000)
+}).default({});
+
+// Full payload
 const IntentParseRequestPayloadSchema = z.object({
   rawText: z.string().min(1).max(2000),
-  context: z.object({
-    userId: z.string().optional(),
-    orgId: z.string().optional(),
-    patientId: z.string().optional(),
-    sessionId: z.string().optional(),
-    clinicalMode: z.enum([
-      'standard',
-      'emergency_triage',
-      'phi_protection',
-      'medication_safety',
-      'staging_readiness'
-    ]).default('standard'),
-    locale: z.string().default('en-US')
-  }).default({}),
-  constraints: z.object({
-    allowLLMParse: z.boolean().default(true),
-    forceConfirm: z.boolean().default(false),
-    maxParseTimeMs: z.number().int().min(100).max(30000).default(5000)
-  }).default({})
+  context: RequestContextSchema,
+  constraints: RequestConstraintsSchema
+});
+
+// Full envelope
+const IntentParseRequestEnvelopeSchema = z.object({
+  header: EnvelopeHeaderSchema,
+  payload: IntentParseRequestPayloadSchema,
+  _meta: z.object({
+    validated: z.boolean(),
+    validatedAt: z.string().datetime()
+  }).optional()
 });
 ```
 
-**Factory functions:**
+**Factory Functions:**
 ```javascript
-// Simple request
-const req = createSimpleRequest(
-  'staging readiness for patient P001',
-  { userId: 'doc-123', patientId: 'P001' },
-  { allowLLMParse: true }
-);
+// Basic request
+createSimpleRequest(rawText, context, constraints)
 
-// Deterministic only (P2)
-const detReq = createDeterministicRequest(
-  '/staging P001',
-  { userId: 'doc-123' }
-);
+// P2: Deterministic only (no LLM)
+createDeterministicRequest(rawText, context)
+// → sets constraints.allowLLMParse = false
 
-// Always require confirmation (P3)
-const confReq = createConfirmationRequest(
-  'give insulin',
-  { userId: 'doc-123', patientId: 'P001' }
-);
+// P3: Always require confirmation
+createConfirmationRequest(rawText, context)
+// → sets constraints.forceConfirm = true
 ```
 
-### IntentParseEnvelope (Output)
-
-What comes OUT of classification.
+### IntentParseEnvelope
 
 ```javascript
-// Parameter schema
+// Parameter source
+const ParameterSourceSchema = z.enum([
+  'explicit',   // User typed directly: "/staging P001"
+  'inferred',   // Extracted from natural language
+  'default',    // System default value
+  'context'     // From request context
+]);
+
+// Clarification reasons
+const ClarificationReasonSchema = z.enum([
+  'ambiguous_intent',
+  'missing_required_parameter',
+  'multiple_intent_matches',
+  'low_confidence',
+  'unknown_entity',
+  'outside_allowlist'  // P1
+]);
+
+// Intent families
+const IntentFamilySchema = z.enum([
+  'clinical',
+  'administrative',
+  'system'
+]);
+
+// Parameter with source tracking
 const ParameterSchema = z.object({
   name: z.string(),
   value: z.unknown(),
-  source: z.enum(['explicit', 'inferred', 'default', 'context']),
+  source: ParameterSourceSchema,
   confidence: z.number().min(0).max(1)
 });
 
-// Full payload schema
+// Clarification option
+const ClarificationOptionSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  intentId: z.string()
+});
+
+// Clarification details
+const ClarificationSchema = z.object({
+  reason: ClarificationReasonSchema,
+  message: z.string(),
+  options: z.array(ClarificationOptionSchema).optional(),
+  missingParameters: z.array(z.string()).optional()
+});
+
+// Parse trace for audit (P5)
+const ParseTraceSchema = z.object({
+  parserUsed: z.enum(['rule-based', 'llm', 'hybrid', 'confirmed']),
+  tier: z.number().int().min(1).max(3).optional(),
+  ruleMatches: z.array(z.object({
+    pattern: z.string(),
+    confidence: z.number().min(0).max(1),
+    tier: z.number().int().optional()
+  })).default([]),
+  llmInvoked: z.boolean().default(false),
+  parseTimeMs: z.number().int(),
+  ruleTableVersion: z.string().optional()
+});
+
+// Full payload
 const IntentParsePayloadSchema = z.object({
   intentId: z.string().nullable(),
-  intentFamily: z.enum(['clinical', 'administrative', 'system']),
+  intentFamily: IntentFamilySchema,
   parameters: z.array(ParameterSchema).default([]),
-  parseConfidence: z.number().min(0).max(1),
-  decisionConfidence: z.number().min(0).max(1).optional(),
+  parseConfidence: z.number().min(0).max(1),           // P4
+  decisionConfidence: z.number().min(0).max(1).optional(), // P4
   requiresClarification: z.boolean(),
   clarification: ClarificationSchema.optional(),
   originalText: z.string(),
@@ -325,10 +476,10 @@ const IntentParsePayloadSchema = z.object({
 });
 ```
 
-**Factory functions:**
+**Factory Functions:**
 ```javascript
-// Success envelope
-const success = createSuccessEnvelope({
+// Success - intent resolved
+createSuccessEnvelope({
   intentId: 'clinical.staging.readiness',
   intentFamily: 'clinical',
   parameters: [{
@@ -345,10 +496,10 @@ const success = createSuccessEnvelope({
     parseTimeMs: 12,
     ruleTableVersion: 'clinical-intents.json@1.0.0'
   }
-});
+})
 
-// Clarification envelope
-const clarify = createClarificationEnvelope({
+// Clarification needed
+createClarificationEnvelope({
   originalText: 'check patient',
   clarification: {
     reason: ClarificationReason.AMBIGUOUS_INTENT,
@@ -359,83 +510,98 @@ const clarify = createClarificationEnvelope({
     ]
   },
   trace: { parserUsed: 'rule-based', parseTimeMs: 8 }
-});
+})
 
-// Outside allowlist envelope (P1)
-const unknown = createOutsideAllowlistEnvelope({
+// P1: Outside allowlist
+createOutsideAllowlistEnvelope({
   originalText: 'order pizza',
-  message: 'Command not recognized. Use /help for available commands.',
+  message: 'Command not recognized.',
   trace: { parserUsed: 'rule-based', parseTimeMs: 3 }
-});
+})
 ```
 
-### IntentConfirmEnvelope (Confirmation)
-
-User confirmation after clarification.
+### IntentConfirmEnvelope
 
 ```javascript
-// Confirmed parameter schema
+// Confirmation source
+const ConfirmationSourceSchema = z.enum([
+  'user_selection',    // User selected from options
+  'user_typed',        // User typed confirmation
+  'system_auto',       // Auto-confirmed (high confidence)
+  'clinical_override'  // Clinician override
+]);
+
+// Confirmed parameter
 const ConfirmedParameterSchema = z.object({
   name: z.string(),
   value: z.unknown(),
   userModified: z.boolean().default(false)
 });
 
-// Full payload schema
+// Full payload
 const IntentConfirmPayloadSchema = z.object({
   parseEnvelopeId: z.string().uuid(),  // Reference to original parse
   confirmedIntentId: z.string(),
   confirmedParameters: z.array(ConfirmedParameterSchema).default([]),
-  userAcknowledged: z.boolean(),
-  confirmationSource: z.enum([
-    'user_selection',
-    'user_typed',
-    'system_auto',
-    'clinical_override'
-  ]).default('user_selection'),
+  userAcknowledged: z.boolean(),       // P3: explicit consent
+  confirmationSource: ConfirmationSourceSchema.default('user_selection'),
   additionalContext: z.string().optional()
 });
 ```
 
-**Factory functions:**
+**Factory Functions:**
 ```javascript
 // User confirmed from options
-const confirm = createUserConfirm({
-  parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440000',
+createUserConfirm({
+  parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440000',  // UUID
   confirmedIntentId: 'clinical.staging.readiness',
   confirmedParameters: [{
     name: 'patientId',
     value: 'P001',
     userModified: false
   }]
-});
+})
 
-// System auto-confirmed (high confidence)
-const auto = createAutoConfirm({
+// System auto-confirmed
+createAutoConfirm({
   parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440001',
   confirmedIntentId: 'hc:help',
   confirmedParameters: [],
-  additionalContext: 'Tier 1 trigger match with 0.95 confidence'
-});
+  additionalContext: 'Tier 1 match with 0.95 confidence'
+})
 ```
 
 ---
 
 ## Rule Tables
 
-### How Rule Tables Define the Closed World (P1)
-
-Rule tables are JSON files that define ALL valid intents. Zod validates these at load time.
+### Rule Table Schema
 
 ```javascript
-// Rule table schema
-const RuleTableSchema = z.object({
-  version: z.string().regex(/^\d+\.\d+\.\d+$/),
-  lastUpdated: z.string().datetime(),
-  intents: z.array(ClinicalIntentRuleSchema).min(1)
+// Pattern rule for Tier 2
+const PatternRuleSchema = z.object({
+  regex: z.string(),                    // Regex with named capture groups
+  weight: z.number().min(0).max(1),     // Confidence when matched
+  tier: z.number().int().default(2)
 });
 
-// Single intent rule schema
+// Parameter definition
+const ParameterDefSchema = z.object({
+  name: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'patientId', 'medication', 'condition']),
+  description: z.string().optional(),
+  defaultValue: z.unknown().optional()
+});
+
+// Clinical safety level
+const ClinicalSafetyLevelSchema = z.enum([
+  'informational',   // Read-only
+  'advisory',        // Recommendations
+  'action_required', // Clinical action
+  'critical'         // High-risk
+]);
+
+// Single intent definition
 const ClinicalIntentRuleSchema = z.object({
   intentId: z.string().regex(/^(hc:|clinical\.)/),
   domain: z.enum(['staging', 'medication_safety', 'triage', 'care_gaps',
@@ -443,21 +609,33 @@ const ClinicalIntentRuleSchema = z.object({
   name: z.string(),
   description: z.string(),
   intentFamily: z.enum(['clinical', 'administrative', 'system']),
-  triggers: z.array(z.string().startsWith('/')).min(1),
-  patterns: z.array(PatternRuleSchema).default([]),
+  triggers: z.array(z.string().startsWith('/')).min(1),  // Tier 1
+  patterns: z.array(PatternRuleSchema).default([]),       // Tier 2
+  synonyms: z.array(z.string()).default([]),
   requiredParameters: z.array(ParameterDefSchema).default([]),
   optionalParameters: z.array(ParameterDefSchema).default([]),
   recipe: z.string(),
-  clinicalSafetyLevel: z.enum(['informational', 'advisory', 'action_required', 'critical'])
+  requiresConfirmation: z.boolean().default(false),
+  clinicalSafetyLevel: ClinicalSafetyLevelSchema,
+  examples: z.array(z.string()).default([])
+});
+
+// Full rule table
+const RuleTableSchema = z.object({
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),  // Semver
+  lastUpdated: z.string().datetime(),
+  description: z.string().optional(),
+  intents: z.array(ClinicalIntentRuleSchema).min(1)
 });
 ```
 
-### Example Rule Table
+### Example: clinical-intents.json
 
 ```json
 {
   "version": "1.0.0",
   "lastUpdated": "2026-02-05T00:00:00.000Z",
+  "description": "Clinical intent definitions",
   "intents": [
     {
       "intentId": "clinical.staging.readiness",
@@ -474,24 +652,35 @@ const ClinicalIntentRuleSchema = z.object({
         {
           "regex": "staging\\s+readiness\\s+(?:for\\s+)?(?:patient\\s+)?(?<patientId>[A-Z0-9-]+)",
           "weight": 0.85
+        },
+        {
+          "regex": "(?:is|check)\\s+(?:patient\\s+)?(?<patientId>[\\w-]+)\\s+ready\\s+for\\s+staging",
+          "weight": 0.8
         }
       ],
+      "synonyms": ["staging assessment", "stage readiness"],
       "requiredParameters": [
-        { "name": "patientId", "type": "patientId" }
+        { "name": "patientId", "type": "patientId", "description": "Patient ID" }
       ],
       "optionalParameters": [
         { "name": "stagingType", "type": "string", "defaultValue": "general" }
       ],
       "recipe": "clinical-staging-readiness",
-      "clinicalSafetyLevel": "advisory"
+      "requiresConfirmation": false,
+      "clinicalSafetyLevel": "advisory",
+      "examples": [
+        "/staging P001",
+        "/staging-readiness MRN-12345",
+        "staging readiness for patient P001"
+      ]
     },
     {
       "intentId": "clinical.med_safety.check",
       "domain": "medication_safety",
       "name": "Medication Safety Check",
-      "description": "Check for drug interactions and contraindications",
+      "description": "Check for drug interactions",
       "intentFamily": "clinical",
-      "triggers": ["/med-safety", "/drug-check", "/ddi"],
+      "triggers": ["/med-safety", "/drug-check", "/ddi", "/medication-check"],
       "patterns": [
         {
           "regex": "drug\\s+interaction(?:s)?\\s+(?:for\\s+)?(?<patientId>[\\w-]+)?",
@@ -502,103 +691,131 @@ const ClinicalIntentRuleSchema = z.object({
           "weight": 0.8
         }
       ],
+      "synonyms": ["drug interaction", "DDI check"],
       "requiredParameters": [],
       "optionalParameters": [
         { "name": "patientId", "type": "patientId" },
         { "name": "medications", "type": "string" }
       ],
       "recipe": "medication-safety-check",
-      "clinicalSafetyLevel": "advisory"
+      "clinicalSafetyLevel": "advisory",
+      "examples": ["/med-safety P001", "/ddi metformin, lisinopril"]
     }
   ]
 }
 ```
 
-### Rule Loader with Caching
+### Rule Loader
 
 ```javascript
-import { loadRuleTables, clearRuleCache, getCurrentVersion } from './rules/index.js';
+import { loadRuleTables, clearRuleCache, getCurrentVersion, getCachedRules } from './rules/index.js';
 
 // Load with 5-minute cache
 const rules = await loadRuleTables();
 
-// Version string for audit (P5)
-console.log(rules.version);  // "clinical-intents.json@1.0.0"
+// Version for audit (P5)
+rules.version  // "clinical-intents.json@1.0.0"
 
-// Access intents
-const staging = rules.getIntent('clinical.staging.readiness');
-const byDomain = rules.getIntentsByDomain('medication_safety');
+// Access methods
+rules.getIntent('clinical.staging.readiness')
+rules.getIntentsByDomain('medication_safety')
+rules.getIntentsByFamily('clinical')
+rules.isKnownIntent(intentId)  // P1
+rules.getAllIntentIds()
 
-// P1: Check closed world
-rules.isKnownIntent('clinical.staging.readiness');  // true
-rules.isKnownIntent('unknown.intent');               // false
-
-// Force reload
-clearRuleCache();
-const fresh = await loadRuleTables();
+// Cache management
+clearRuleCache();  // Force reload
+getCachedRules();  // Get cached or null
+getCurrentVersion();  // Get version without reload
 ```
 
 ---
 
 ## IntentRegistry
 
-The registry loads rule tables and provides Zod-validated intent lookup.
+Loads rule tables and provides Zod-validated intent operations.
 
 ```javascript
-import { getIntentRegistryAsync } from './IntentRegistry.js';
+import { getIntentRegistry, getIntentRegistryAsync } from './IntentRegistry.js';
 
+// Async (loads rule tables)
 const registry = await getIntentRegistryAsync();
 
+// Sync (uses cache or fallback)
+const registry = getIntentRegistry();
+
 // P1: Closed-world check
-registry.isKnown('clinical.staging.readiness');  // true
-registry.isKnown('fake.intent');                  // false
+registry.isKnown('clinical.staging.readiness')  // true
+registry.isKnown('fake.intent')                  // false
 
-// Get intent definition
+// Get intent
 const intent = registry.getIntent('clinical.staging.readiness');
-// Returns: { intentId, name, parameterSchema, triggers, patterns, recipe, ... }
+// {
+//   intentId, name, description, intentFamily,
+//   parameterSchema: ZodObject,  // Built from rule definition
+//   requiredParameters: ['patientId'],
+//   optionalParameters: ['stagingType'],
+//   triggers: ['/staging-readiness', '/staging'],
+//   patterns: [...],
+//   recipe: 'clinical-staging-readiness',
+//   clinicalSafetyLevel: 'advisory'
+// }
 
-// Get by trigger (Tier 1)
-const byTrigger = registry.getIntentByTrigger('/staging');
+// Get by trigger (Tier 1 lookup)
+registry.getIntentByTrigger('/staging')
+
+// Get collections
+registry.getAllIntents()
+registry.getAllIntentIds()
+registry.getIntentsByFamily('clinical')
+registry.getIntentsByDomain('staging')
 
 // P5: Version for audit
-registry.getRuleTableVersion();  // "clinical-intents.json@1.0.0"
+registry.getRuleTableVersion()  // "clinical-intents.json@1.0.0"
 
 // Zod parameter validation
-const validation = registry.validateParameters('clinical.staging.readiness', [
+registry.validateParameters('clinical.staging.readiness', [
   { name: 'patientId', value: 'P001' }
-]);
+])
 // { isValid: true, value: { patientId: 'P001', stagingType: 'general' } }
 
-// Check missing required parameters
-const missing = registry.getMissingRequired('clinical.staging.readiness', []);
+registry.validateParameters('clinical.staging.readiness', [])
+// { isValid: false, error: '...', missingFields: ['patientId'] }
+
+// Get missing required
+registry.getMissingRequired('clinical.staging.readiness', [])
 // ['patientId']
+
+// Reload from rule tables
+await registry.reload();
 ```
 
 ---
 
-## Files
+## File Structure
 
 ```
 src/healthcare/nls/
 ├── index.js                          # Module exports
-├── IntentRegistry.js                 # Registry with Zod parameter validation
+├── IntentRegistry.js                 # Registry + Zod parameter validation
+├── NaturalLanguageService.js         # Main NLS service (uses this system)
 │
 ├── contracts/zod/
-│   ├── IntentParseRequestEnvelope.js # Input envelope schema
-│   ├── IntentParseEnvelope.js        # Output envelope schema (dual confidence)
-│   └── IntentConfirmEnvelope.js      # Confirmation envelope schema
+│   ├── IntentParseRequestEnvelope.js # Input schema + factories
+│   ├── IntentParseEnvelope.js        # Output schema + factories
+│   └── IntentConfirmEnvelope.js      # Confirmation schema + factories
 │
 ├── rules/
-│   ├── index.js                      # Rule loader with 5-min cache
-│   ├── rule-schema.js                # Zod schema for rule JSON validation
-│   └── clinical-intents.json         # Clinical intent definitions
+│   ├── index.js                      # Rule loader (5-min cache)
+│   ├── rule-schema.js                # Zod schema for rule JSON
+│   └── clinical-intents.json         # Intent definitions
 │
 ├── parsers/
-│   ├── RuleBasedParser.js            # Tier 1-2 deterministic parsing
-│   └── LLMParser.js                  # Tier 3 LLM parsing
+│   ├── RuleBasedParser.js            # Tier 1-2 (deterministic)
+│   └── LLMParser.js                  # Tier 3 (optional)
 │
 └── extractors/
-    └── EntityExtractor.js            # Parameter extraction from text
+    └── EntityExtractor.js            # Parameter extraction
 ```
 
 ---
@@ -610,13 +827,12 @@ node src/healthcare/nls/test-all.mjs
 ```
 
 **26 tests verify:**
-- Rule table Zod validation
-- IntentRegistry initialization and P1 closed-world
-- IntentParseRequestEnvelope factory functions
-- IntentParseEnvelope with dual confidence (P4)
-- IntentConfirmEnvelope with correct field names
-- P2 tier tracking in trace
-- P5 version tracking
+- Rule table Zod validation (load, validate, reject invalid)
+- IntentRegistry (init, isKnown, getByTrigger, validateParameters)
+- IntentParseRequestEnvelope (createSimple, createDeterministic, createConfirmation)
+- IntentParseEnvelope (createSuccess, createClarification, createOutsideAllowlist)
+- IntentConfirmEnvelope (createUserConfirm, createAutoConfirm)
+- P1-P5 enforcement
 
 ---
 
@@ -624,4 +840,4 @@ node src/healthcare/nls/test-all.mjs
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-02-05 | Initial Zod-based implementation with P1-P5 |
+| 1.0.0 | 2026-02-05 | Initial Zod implementation with P1-P5 |
