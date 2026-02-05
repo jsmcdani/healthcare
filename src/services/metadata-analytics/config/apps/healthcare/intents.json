@@ -12,9 +12,10 @@
         "patientId": { "type": "string", "extractFrom": "args", "required": true }
       },
       "patterns": [
-        { "regex": "(?:show|get|view).*patient.*(?:summary|info|details)?", "weight": 0.9 },
-        { "regex": "patient\\s+(?:overview|status|record)", "weight": 0.9 },
-        { "regex": "(?:who\\s+is|look\\s+up)\\s+(?:patient\\s+)?(?:MRN|P)\\d+", "weight": 0.95 }
+        { "regex": "(?:show|get|view|find)\\s+(?:patient|pt)\\s+([A-Za-z0-9-]+)", "weight": 0.95, "groups": { "patientId": 1 } },
+        { "regex": "patient\\s+(?:summary|info|details|record)\\s+(?:for\\s+)?([A-Za-z0-9-]+)", "weight": 0.95, "groups": { "patientId": 1 } },
+        { "regex": "(?:who\\s+is|look\\s+up)\\s+(?:patient\\s+)?([A-Za-z0-9-]+)", "weight": 0.95, "groups": { "patientId": 1 } },
+        { "regex": "([A-Za-z0-9-]+)\\s+patient\\s+(?:summary|info)", "weight": 0.9, "groups": { "patientId": 1 } }
       ],
       "recipe": "patient-summary",
       "confidenceThreshold": 0.8,
@@ -29,10 +30,11 @@
         "condition": { "type": "string", "extractFrom": "args", "required": true }
       },
       "patterns": [
-        { "regex": "(?:treatment|therapy)\\s+(?:for|recommendation)", "weight": 0.95 },
-        { "regex": "how\\s+(?:to|should)\\s+treat", "weight": 0.9 },
-        { "regex": "(?:what|recommend).*(?:treatment|therapy|medication)", "weight": 0.9 },
-        { "regex": "(?:diabetes|hypertension|copd|depression).*(?:treatment|management)", "weight": 0.85 }
+        { "regex": "treatment\\s+(?:for|of)\\s+(.+)", "weight": 0.95, "groups": { "condition": 1 } },
+        { "regex": "(?:how\\s+(?:to|should\\s+(?:I|we)))\\s+treat\\s+(.+)", "weight": 0.95, "groups": { "condition": 1 } },
+        { "regex": "(?:therapy|medication)\\s+(?:for|recommendation)\\s+(.+)", "weight": 0.9, "groups": { "condition": 1 } },
+        { "regex": "(?:recommend|suggest)\\s+(?:treatment|therapy)\\s+(?:for\\s+)?(.+)", "weight": 0.9, "groups": { "condition": 1 } },
+        { "regex": "(diabetes|hypertension|copd|asthma|depression|anxiety)\\s+(?:treatment|management|therapy)", "weight": 0.9, "groups": { "condition": 1 } }
       ],
       "recipe": "treatment-recommendation",
       "confidenceThreshold": 0.8,
@@ -47,9 +49,10 @@
         "patientId": { "type": "string", "extractFrom": "args", "required": true }
       },
       "patterns": [
-        { "regex": "care\\s+gaps?", "weight": 0.95 },
-        { "regex": "(?:overdue|missing|needed)\\s+(?:screening|test|exam)", "weight": 0.9 },
-        { "regex": "(?:what|which).*(?:screenings?|tests?).*(?:due|needed)", "weight": 0.85 }
+        { "regex": "care\\s+gaps?\\s+(?:for\\s+)?(?:patient\\s+)?([A-Za-z0-9-]+)", "weight": 0.95, "groups": { "patientId": 1 } },
+        { "regex": "(?:overdue|missing|needed)\\s+(?:screenings?|tests?|exams?)\\s+(?:for\\s+)?([A-Za-z0-9-]+)", "weight": 0.9, "groups": { "patientId": 1 } },
+        { "regex": "(?:what|which)\\s+(?:screenings?|tests?)\\s+(?:are\\s+)?(?:due|needed|overdue)\\s+(?:for\\s+)?([A-Za-z0-9-]+)", "weight": 0.9, "groups": { "patientId": 1 } },
+        { "regex": "([A-Za-z0-9-]+)\\s+care\\s+gaps?", "weight": 0.85, "groups": { "patientId": 1 } }
       ],
       "recipe": "care-gap-analysis",
       "confidenceThreshold": 0.8,
@@ -65,9 +68,9 @@
         "chiefComplaint": { "type": "string", "extractFrom": "args", "required": false }
       },
       "patterns": [
-        { "regex": "(?:emergency|urgent|critical|stat)\\s+(?:triage|assessment)?", "weight": 0.95 },
-        { "regex": "(?:code\\s+blue|cardiac\\s+arrest|chest\\s+pain|difficulty\\s+breathing)", "weight": 0.98 },
-        { "regex": "(?:severe|acute|sudden)\\s+(?:pain|symptoms)", "weight": 0.9 }
+        { "regex": "(?:emergency|urgent|stat)\\s+(?:triage|assessment)?\\s+(?:for\\s+)?([A-Za-z0-9-]+)", "weight": 0.95, "groups": { "patientId": 1 } },
+        { "regex": "(?:code\\s+blue|cardiac\\s+arrest)\\s+(?:patient\\s+)?([A-Za-z0-9-]+)", "weight": 0.98, "groups": { "patientId": 1 } },
+        { "regex": "([A-Za-z0-9-]+)\\s+(?:has|with)\\s+(chest\\s+pain|difficulty\\s+breathing|severe\\s+pain)", "weight": 0.95, "groups": { "patientId": 1, "chiefComplaint": 2 } }
       ],
       "recipe": "emergency-triage",
       "confidenceThreshold": 0.6,
