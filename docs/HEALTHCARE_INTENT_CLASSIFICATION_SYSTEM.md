@@ -153,18 +153,27 @@ User acknowledgment when clarification was needed.
 ```javascript
 import {
   createUserConfirm,
+  createAutoConfirm,
   ConfirmationSource
 } from './contracts/zod/IntentConfirmEnvelope.js';
 
+// User explicitly confirmed the intent
 const confirmation = createUserConfirm({
-  parseEnvelopeId: 'parse-123',
-  intentId: 'clinical.staging.readiness',
-  parameters: [{
+  parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440000',  // Must be valid UUID
+  confirmedIntentId: 'clinical.staging.readiness',
+  confirmedParameters: [{
     name: 'patientId',
     value: 'P001',
-    originalValue: 'patient P001',
-    source: ConfirmationSource.USER_SELECTION
+    userModified: false  // true if user changed the parsed value
   }]
+});
+
+// System auto-confirmed (high confidence, non-clinical)
+const autoConfirm = createAutoConfirm({
+  parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440001',
+  confirmedIntentId: 'hc:help',
+  confirmedParameters: [],
+  additionalContext: 'High confidence tier 1 match'
 });
 ```
 
