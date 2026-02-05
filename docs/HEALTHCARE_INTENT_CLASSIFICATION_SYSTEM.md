@@ -2,17 +2,19 @@
 
 ## Overview
 
-A closed-world, deterministic-first intent classification system for healthcare applications using **Zod** for type-safe, deterministic validation.
+A closed-world, deterministic-first intent classification system for healthcare using **Zod** for type-safe validation.
 
 ## Core Principles
 
-| Principle | Description |
-|-----------|-------------|
-| **P1** | Closed-world intent universe (allowlist only) |
-| **P2** | Deterministic-first (explicit → rules → optional LLM) |
-| **P3** | Clarify, don't guess |
-| **P4** | Dual confidence (parseConfidence vs decisionConfidence) |
-| **P5** | Auditability + version pinning |
+| ID | Principle | Description |
+|----|-----------|-------------|
+| P1 | Closed-world | Only intents in the allowlist are valid |
+| P2 | Deterministic-first | Tier 1 triggers → Tier 2 patterns → Tier 3 LLM |
+| P3 | Clarify, don't guess | Ask user when uncertain |
+| P4 | Dual confidence | parseConfidence (classification) vs decisionConfidence (clinical) |
+| P5 | Auditability | Version pinning, trace logging |
+
+---
 
 ## Architecture
 
@@ -21,134 +23,265 @@ User Input
     │
     ▼
 ┌─────────────────────────────────┐
-│  IntentParseRequestEnvelope     │  ← Zod-validated request
-│  (rawText, context, constraints)│
+│  IntentParseRequestEnvelope     │
+│  - rawText                      │
+│  - context (userId, orgId, etc) │
+│  - constraints (allowLLMParse)  │
 └─────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────┐
-│       IntentRegistry            │  ← Loads from rule tables
-│  (closed-world allowlist)       │
+│       IntentRegistry            │
+│  - Loads from rule tables       │
+│  - Zod parameter validation     │
+│  - P1: isKnown() check          │
 └─────────────────────────────────┘
     │
-    ├── Tier 1: Slash command triggers (/staging, /med-safety)
-    ├── Tier 2: Regex pattern matching
-    └── Tier 3: LLM classification (if allowed)
+    ├── Tier 1: /staging P001 → confidence 1.0
+    ├── Tier 2: "staging readiness for P001" → pattern match
+    └── Tier 3: LLM (if allowed)
     │
     ▼
 ┌─────────────────────────────────┐
-│    IntentParseEnvelope          │  ← Zod-validated result
-│  (dual confidence, audit trace) │
+│    IntentParseEnvelope          │
+│  - intentId                     │
+│  - parseConfidence              │
+│  - decisionConfidence (P4)      │
+│  - trace.ruleTableVersion (P5)  │
 └─────────────────────────────────┘
     │
     ▼ (if requiresClarification)
 ┌─────────────────────────────────┐
-│   IntentConfirmEnvelope         │  ← User acknowledgment
-│  (confirmed params, source)     │
+│   IntentConfirmEnvelope         │
+│  - parseEnvelopeId (UUID)       │
+│  - confirmedIntentId            │
+│  - confirmedParameters          │
+│  - userAcknowledged             │
 └─────────────────────────────────┘
 ```
+
+---
 
 ## File Structure
 
 ```
 src/healthcare/nls/
-├── index.js                          # Module exports (Zod schemas)
-├── IntentRegistry.js                 # Intent registry with Zod validation
-├── NaturalLanguageService.js         # Main NLS service
+├── index.js                      # Exports
+├── IntentRegistry.js             # Registry with Zod validation
+├── NaturalLanguageService.js     # Main service
 │
-├── contracts/zod/                    # Zod-based contracts
-│   ├── IntentParseRequestEnvelope.js # Request with clinical modes
-│   ├── IntentParseEnvelope.js        # Result with dual confidence
-│   └── IntentConfirmEnvelope.js      # User confirmation
+├── contracts/zod/
+│   ├── IntentParseRequestEnvelope.js
+│   ├── IntentParseEnvelope.js
+│   └── IntentConfirmEnvelope.js
 │
-├── rules/                            # Rule table system
-│   ├── index.js                      # Rule loader with caching
-│   ├── rule-schema.js                # Zod validation for rules
-│   └── clinical-intents.json         # Clinical intent definitions
+├── rules/
+│   ├── index.js                  # Rule loader
+│   ├── rule-schema.js            # Zod validation for rules
+│   └── clinical-intents.json     # Intent definitions
 │
-├── parsers/
-│   ├── RuleBasedParser.js            # Tier 1-2 parsing
-│   └── LLMParser.js                  # Tier 3 parsing
-│
-└── extractors/
-    └── EntityExtractor.js            # Entity extraction
+└── parsers/
+    ├── RuleBasedParser.js
+    └── LLMParser.js
 ```
+
+---
 
 ## Zod Schemas
 
-### IntentParseRequestEnvelope
+### 1. IntentParseRequestEnvelope
 
-Request envelope for intent parsing with clinical context.
+Input to the NLS parser.
 
-```javascript
-import { createSimpleRequest, ClinicalMode } from './contracts/zod/IntentParseRequestEnvelope.js';
+**Schema Fields:**
 
-const request = createSimpleRequest('staging readiness for patient P001', {
-  userId: 'clinician-123',
-  orgId: 'hospital-abc',
-  patientId: 'P001',
-  clinicalMode: ClinicalMode.STAGING_READINESS
-}, {
-  allowLLMParse: true,      // Allow Tier 3 if needed
-  forceConfirm: false,      // Don't force confirmation
-  maxParseTimeMs: 5000      // 5 second timeout
-});
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `payload.rawText` | string | Yes | User input (1-2000 chars) |
+| `payload.context.userId` | string | No | User making request |
+| `payload.context.orgId` | string | No | Organization |
+| `payload.context.patientId` | string | No | Patient context |
+| `payload.context.clinicalMode` | enum | No | Default: 'standard' |
+| `payload.constraints.allowLLMParse` | boolean | No | Default: true |
+| `payload.constraints.forceConfirm` | boolean | No | Default: false |
+| `payload.constraints.maxParseTimeMs` | number | No | Default: 5000 |
 
 **Clinical Modes:**
-- `standard` - Normal clinical operations
-- `emergency_triage` - Emergency department triage
-- `phi_protection` - PHI-sensitive context
-- `medication_safety` - Medication interaction checks
-- `staging_readiness` - Clinical staging assessments
+- `standard`
+- `emergency_triage`
+- `phi_protection`
+- `medication_safety`
+- `staging_readiness`
 
-### IntentParseEnvelope
+**Factory Functions:**
 
-Result envelope with dual confidence and audit trail.
+```javascript
+import {
+  createSimpleRequest,
+  createDeterministicRequest,
+  createConfirmationRequest,
+  ClinicalMode
+} from './contracts/zod/IntentParseRequestEnvelope.js';
+
+// Basic request
+const req = createSimpleRequest(
+  'staging readiness for patient P001',  // rawText
+  { userId: 'user-123', orgId: 'org-456' },  // context
+  { allowLLMParse: true }  // constraints
+);
+
+// P2: Deterministic only (no LLM)
+const detReq = createDeterministicRequest(
+  '/staging P001',
+  { userId: 'user-123' }
+);
+
+// P3: Always require confirmation
+const confReq = createConfirmationRequest(
+  'staging readiness for P001',
+  { userId: 'user-123', clinicalMode: ClinicalMode.STAGING_READINESS }
+);
+```
+
+---
+
+### 2. IntentParseEnvelope
+
+Output from the NLS parser.
+
+**Schema Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `payload.intentId` | string/null | Yes | Classified intent (null if clarification needed) |
+| `payload.intentFamily` | enum | Yes | 'clinical', 'administrative', 'system' |
+| `payload.parameters` | array | Yes | Extracted parameters |
+| `payload.parseConfidence` | number | Yes | P4: Classification certainty (0-1) |
+| `payload.decisionConfidence` | number | No | P4: Clinical appropriateness (0-1) |
+| `payload.requiresClarification` | boolean | Yes | Whether user input needed |
+| `payload.clarification` | object | No | Clarification details |
+| `payload.originalText` | string | Yes | Original user input |
+| `payload.trace` | object | Yes | P5: Audit trace |
+
+**Parameter Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Parameter name |
+| `value` | any | Yes | Parameter value |
+| `source` | enum | Yes | 'explicit', 'inferred', 'default', 'context' |
+| `confidence` | number | Yes | Confidence in value (0-1) |
+
+**Trace Schema (P5):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `parserUsed` | enum | Yes | 'rule-based', 'llm', 'hybrid', 'confirmed' |
+| `tier` | number | No | 1, 2, or 3 |
+| `parseTimeMs` | number | Yes | Parse duration |
+| `ruleTableVersion` | string | No | Version for reproducibility |
+| `llmInvoked` | boolean | No | Whether LLM was used |
+
+**Clarification Reasons (P1, P3):**
+- `ambiguous_intent`
+- `missing_required_parameter`
+- `multiple_intent_matches`
+- `low_confidence`
+- `unknown_entity`
+- `outside_allowlist` (P1: not in closed-world)
+
+**Factory Functions:**
 
 ```javascript
 import {
   createSuccessEnvelope,
+  createClarificationEnvelope,
+  createOutsideAllowlistEnvelope,
   ParameterSource,
-  ParseTier
+  ClarificationReason
 } from './contracts/zod/IntentParseEnvelope.js';
 
-const result = createSuccessEnvelope({
+// Success - intent resolved
+const success = createSuccessEnvelope({
   intentId: 'clinical.staging.readiness',
   intentFamily: 'clinical',
   parameters: [{
     name: 'patientId',
     value: 'P001',
-    source: ParameterSource.INFERRED,  // Extracted from text
+    source: ParameterSource.INFERRED,
     confidence: 0.95
   }],
-  parseConfidence: 0.95,      // P4: Classification certainty
-  decisionConfidence: 0.85,   // P4: Clinical appropriateness
+  parseConfidence: 0.95,
+  decisionConfidence: 0.85,  // Optional, clinical only
   originalText: 'staging readiness for patient P001',
   trace: {
     parserUsed: 'rule-based',
-    tier: ParseTier.TIER_2_PATTERN,
+    tier: 2,
     parseTimeMs: 12,
-    ruleTableVersion: 'clinical-intents.json@1.0.0'  // P5: Auditability
+    ruleTableVersion: 'clinical-intents.json@1.0.0'
+  }
+});
+
+// Clarification needed
+const clarify = createClarificationEnvelope({
+  originalText: 'check patient',
+  clarification: {
+    reason: ClarificationReason.AMBIGUOUS_INTENT,
+    message: 'What would you like to check?',
+    options: [
+      { label: 'Patient Summary', value: 'summary', intentId: 'hc:patient-summary' },
+      { label: 'Care Gaps', value: 'gaps', intentId: 'hc:care-gaps' }
+    ]
+  },
+  trace: {
+    parserUsed: 'rule-based',
+    parseTimeMs: 5
+  }
+});
+
+// P1: Intent not in allowlist
+const unknown = createOutsideAllowlistEnvelope({
+  originalText: 'do something unknown',
+  message: 'Command not recognized. Use /help for available commands.',
+  trace: {
+    parserUsed: 'rule-based',
+    parseTimeMs: 3
   }
 });
 ```
 
-**Dual Confidence (P4):**
-- `parseConfidence` - How confident the system understood the intent
-- `decisionConfidence` - How appropriate this action is clinically (optional)
+---
 
-**Clarification Reasons (P1, P3):**
-- `ambiguous_intent` - Multiple possible meanings
-- `missing_required_parameter` - Required param not found
-- `multiple_intent_matches` - Several intents match equally
-- `low_confidence` - Below threshold
-- `unknown_entity` - Entity not recognized
-- `outside_allowlist` - **P1: Intent not in closed-world allowlist**
+### 3. IntentConfirmEnvelope
 
-### IntentConfirmEnvelope
+User confirmation when clarification was needed.
 
-User acknowledgment when clarification was needed.
+**Schema Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `payload.parseEnvelopeId` | string (UUID) | Yes | Reference to original parse |
+| `payload.confirmedIntentId` | string | Yes | Intent user confirmed |
+| `payload.confirmedParameters` | array | No | Confirmed parameters |
+| `payload.userAcknowledged` | boolean | Yes | Explicit user consent |
+| `payload.confirmationSource` | enum | No | How confirmed |
+| `payload.additionalContext` | string | No | User notes |
+
+**Confirmed Parameter Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Parameter name |
+| `value` | any | Yes | Confirmed value |
+| `userModified` | boolean | No | True if user changed it |
+
+**Confirmation Sources:**
+- `user_selection` - User picked from options
+- `user_typed` - User typed explicit input
+- `system_auto` - Auto-confirmed (high confidence)
+- `clinical_override` - Clinician override
+
+**Factory Functions:**
 
 ```javascript
 import {
@@ -157,19 +290,19 @@ import {
   ConfirmationSource
 } from './contracts/zod/IntentConfirmEnvelope.js';
 
-// User explicitly confirmed the intent
-const confirmation = createUserConfirm({
+// User explicitly confirmed
+const confirm = createUserConfirm({
   parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440000',  // Must be valid UUID
   confirmedIntentId: 'clinical.staging.readiness',
   confirmedParameters: [{
     name: 'patientId',
     value: 'P001',
-    userModified: false  // true if user changed the parsed value
+    userModified: false
   }]
 });
 
 // System auto-confirmed (high confidence, non-clinical)
-const autoConfirm = createAutoConfirm({
+const auto = createAutoConfirm({
   parseEnvelopeId: '550e8400-e29b-41d4-a716-446655440001',
   confirmedIntentId: 'hc:help',
   confirmedParameters: [],
@@ -177,27 +310,11 @@ const autoConfirm = createAutoConfirm({
 });
 ```
 
-**Confirmation Sources:**
-- `user_selection` - User selected from options
-- `user_typed` - User typed a value
-- `system_auto` - System auto-confirmed (high confidence)
-- `clinical_override` - Clinician override
+---
 
 ## Rule Tables
 
-### Schema (rule-schema.js)
-
-```javascript
-import { validateRuleTable, validateIntentRule } from './rules/rule-schema.js';
-
-// Validates entire rule table JSON
-const result = validateRuleTable(jsonData);
-if (!result.success) {
-  console.error('Validation errors:', result.error.errors);
-}
-```
-
-### Clinical Intents (clinical-intents.json)
+### clinical-intents.json
 
 ```json
 {
@@ -231,20 +348,17 @@ if (!result.success) {
 ```javascript
 import { loadRuleTables, getCurrentVersion, clearRuleCache } from './rules/index.js';
 
-// Load with 5-minute caching
 const rules = await loadRuleTables();
-console.log('Version:', rules.version);  // "clinical-intents.json@1.0.0"
+console.log(rules.version);  // "clinical-intents.json@1.0.0"
+console.log(rules.intents.length);  // 2
 
-// Get specific intent
-const intent = rules.getIntent('clinical.staging.readiness');
-
-// Clear cache to force reload
-clearRuleCache();
+// Check if intent exists
+const found = rules.isKnownIntent('clinical.staging.readiness');  // true
 ```
 
-## IntentRegistry
+---
 
-Central registry that loads from rule tables with Zod parameter validation.
+## IntentRegistry
 
 ```javascript
 import { getIntentRegistryAsync } from './IntentRegistry.js';
@@ -252,103 +366,98 @@ import { getIntentRegistryAsync } from './IntentRegistry.js';
 const registry = await getIntentRegistryAsync();
 
 // P1: Closed-world check
-if (!registry.isKnown(intentId)) {
-  // Return OUTSIDE_ALLOWLIST clarification
-}
+registry.isKnown('clinical.staging.readiness');  // true
+registry.isKnown('fake.intent');  // false
 
-// Get intent definition
-const intent = registry.getIntent('clinical.staging.readiness');
+// Get by trigger
+const intent = registry.getIntentByTrigger('/staging');
 
-// Zod-based parameter validation
-const validation = registry.validateParameters(intentId, [
+// P5: Version tracking
+registry.getRuleTableVersion();  // "clinical-intents.json@1.0.0"
+
+// Zod parameter validation
+const result = registry.validateParameters('clinical.staging.readiness', [
   { name: 'patientId', value: 'P001' }
 ]);
+// { isValid: true, value: { patientId: 'P001' } }
 
-if (!validation.isValid) {
-  console.error('Missing:', validation.missingFields);
-}
-
-// P5: Get rule table version for audit
-const version = registry.getRuleTableVersion();
+// Check missing required
+const missing = registry.getMissingRequired('clinical.staging.readiness', []);
+// ['patientId']
 ```
+
+---
 
 ## Parse Tiers (P2)
 
 | Tier | Method | Confidence | Example |
 |------|--------|------------|---------|
-| **1** | Slash commands | 1.0 | `/staging P001` |
-| **2** | Regex patterns | 0.7-0.95 | "staging readiness for patient P001" |
-| **3** | LLM classification | 0.5-0.9 | "is the patient ready to be staged?" |
+| 1 | Slash commands | 1.0 | `/staging P001` |
+| 2 | Regex patterns | 0.7-0.95 | "staging readiness for patient P001" |
+| 3 | LLM | 0.5-0.9 | "is the patient ready to be staged?" |
 
-Deterministic-first: Always try Tier 1-2 before Tier 3.
+Always try Tier 1-2 before Tier 3.
 
-## Usage Example
-
-```javascript
-import {
-  getNaturalLanguageService,
-  createSimpleRequest,
-  ClarificationReason
-} from './src/healthcare/nls/index.js';
-
-const nls = await getNaturalLanguageService();
-
-// Parse user input
-const request = createSimpleRequest('staging readiness for patient P001', {
-  userId: 'clinician-123',
-  orgId: 'hospital-abc'
-});
-
-const result = await nls.parse(request);
-
-if (result.payload.requiresClarification) {
-  if (result.payload.clarification.reason === ClarificationReason.OUTSIDE_ALLOWLIST) {
-    // P1: Intent not recognized
-    console.log('Unknown command. Use /help for available commands.');
-  } else {
-    // P3: Clarify, don't guess
-    console.log(result.payload.clarification.message);
-  }
-} else {
-  // Execute the intent
-  console.log('Intent:', result.payload.intentId);
-  console.log('Confidence:', result.payload.parseConfidence);
-  console.log('Tier:', result.payload.trace.tier);
-}
-```
-
-## Why Zod?
-
-1. **Deterministic validation** - Same input always produces same output
-2. **Type inference** - TypeScript types generated from schemas
-3. **Composable schemas** - Build complex types from simple ones
-4. **Parse, don't validate** - Returns typed data, not just boolean
-5. **Rich error messages** - Detailed validation errors with paths
+---
 
 ## Testing
 
 ```bash
-# Run comprehensive test
-node --input-type=module -e "
-import { loadRuleTables } from './src/healthcare/nls/rules/index.js';
-import { getIntentRegistryAsync } from './src/healthcare/nls/IntentRegistry.js';
-import { createSimpleRequest, createSuccessEnvelope, ParameterSource } from './src/healthcare/nls/index.js';
-
-const rules = await loadRuleTables();
-const registry = await getIntentRegistryAsync();
-
-console.log('Rule version:', rules.version);
-console.log('Total intents:', registry.getAllIntentIds().length);
-console.log('Test passed!');
-"
+node src/healthcare/nls/test-all.mjs
 ```
+
+Expected output:
+```
+=== HEALTHCARE INTENT CLASSIFICATION SYSTEM TESTS ===
+
+--- Rule Loader Tests ---
+PASS: Rule tables load successfully
+PASS: Rule version tracking (P5)
+PASS: Rule table Zod validation
+PASS: Rule table rejects invalid schema
+
+--- IntentRegistry Tests ---
+PASS: Registry initializes from rule tables
+PASS: Registry has correct intent count
+PASS: Registry tracks rule table version (P5)
+PASS: P1: isKnown returns true for valid intent
+PASS: P1: isKnown returns false for unknown intent
+PASS: Get intent by trigger
+PASS: Zod parameter validation - valid
+PASS: Zod parameter validation - missing required
+
+--- IntentParseRequestEnvelope Tests ---
+PASS: Create simple request
+PASS: Create deterministic request (P2: no LLM)
+PASS: Create confirmation request (P3: always confirm)
+PASS: Clinical modes
+PASS: Request validation rejects empty rawText
+
+--- IntentParseEnvelope Tests ---
+PASS: Create success envelope
+PASS: P4: Dual confidence in envelope
+PASS: Create clarification envelope
+PASS: P1: Create outside allowlist envelope
+PASS: Parse tier tracking (P2)
+PASS: Parameter source tracking
+
+--- IntentConfirmEnvelope Tests ---
+PASS: Create user confirmation
+PASS: Create auto confirmation
+PASS: Confirmation sources
+
+=== TEST SUMMARY ===
+Passed: 26
+Failed: 0
+Total: 26
+
+All tests passed!
+```
+
+---
 
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-02-05 | Initial Zod-based implementation |
-
----
-
-*Generated for Metalligent Healthcare Platform*
+| 1.0.0 | 2026-02-05 | Initial Zod implementation |
