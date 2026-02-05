@@ -1,0 +1,118 @@
+{
+  "modelId": "nls_intent_parsing_v1",
+  "modelVersion": "1.0.0",
+  "name": "NLS Intent Parsing Confidence Model",
+  "description": "Confidence model for Natural Language Service intent classification. Maps parser tier, pattern quality, and entity extraction completeness to calibrated confidence scores. Implements Mount Sinai 'I don't know' safety feature for ambiguous queries.",
+
+  "factors": [
+    {
+      "id": "parser_certainty",
+      "name": "Parser Certainty",
+      "weight": 0.35,
+      "source": "model_certainty",
+      "defaultValue": 0.5
+    },
+    {
+      "id": "parser_tier_reliability",
+      "name": "Parser Tier Reliability",
+      "weight": 0.30,
+      "source": "source_reliability",
+      "defaultValue": 0.6
+    },
+    {
+      "id": "entity_completeness",
+      "name": "Entity Extraction Completeness",
+      "weight": 0.25,
+      "source": "data_completeness",
+      "defaultValue": 0.5
+    },
+    {
+      "id": "query_clarity",
+      "name": "Query Clarity",
+      "weight": 0.10,
+      "source": "data_quality",
+      "defaultValue": 0.7
+    }
+  ],
+
+  "penalties": [
+    {
+      "id": "ambiguous_intent",
+      "condition": "ambiguousIntent",
+      "multiplier": 0.7,
+      "description": "30% penalty when multiple intents match closely"
+    },
+    {
+      "id": "missing_required_params",
+      "condition": "missingRequiredParams",
+      "multiplier": 0.75,
+      "description": "25% penalty when required parameters not extracted"
+    },
+    {
+      "id": "llm_fallback",
+      "condition": "llmFallback",
+      "multiplier": 0.85,
+      "description": "15% penalty when LLM fallback was required"
+    },
+    {
+      "id": "low_pattern_match",
+      "condition": "lowPatternMatch",
+      "multiplier": 0.8,
+      "description": "20% penalty when pattern match confidence is low"
+    },
+    {
+      "id": "partial_entity_match",
+      "condition": "partialEntityMatch",
+      "multiplier": 0.9,
+      "description": "10% penalty when only partial entities extracted"
+    }
+  ],
+
+  "boosts": [
+    {
+      "id": "exact_trigger",
+      "condition": "exactTriggerMatch",
+      "additive": 0.1,
+      "description": "10% boost for exact slash command trigger match"
+    },
+    {
+      "id": "all_entities_found",
+      "condition": "allEntitiesExtracted",
+      "additive": 0.08,
+      "description": "8% boost when all required entities successfully extracted"
+    },
+    {
+      "id": "high_pattern_weight",
+      "condition": "highPatternWeight",
+      "additive": 0.05,
+      "description": "5% boost for high-weight pattern match (>0.9)"
+    },
+    {
+      "id": "single_clear_match",
+      "condition": "singleClearMatch",
+      "additive": 0.1,
+      "description": "10% boost when only one intent matched with high confidence"
+    }
+  ],
+
+  "thresholds": {
+    "high": 0.85,
+    "moderate": 0.65,
+    "low": 0.40,
+    "uncertain": 0.20
+  },
+
+  "uncertaintyTriggers": [
+    "no_intent_match",
+    "conflicting_intents",
+    "insufficient_query_length",
+    "outside_intent_allowlist"
+  ],
+
+  "metadata": {
+    "createdAt": "2025-02-05T00:00:00.000Z",
+    "author": "Metalligent Healthcare",
+    "domain": "nls",
+    "compliance": ["HIPAA"]
+  }
+}

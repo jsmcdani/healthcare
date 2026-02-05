@@ -1,12 +1,16 @@
 /**
  * LLMParser - Bounded LLM fallback for intent parsing
- * Uses cachedLLMCall with outputSchema - Claude Structured Outputs
+ *
+ * Uses cachedLLMCall with outputSchema - Claude Structured Outputs.
+ * Outputs raw parse signals. Confidence is computed centrally by the
+ * control plane (NLSConfidenceIntegration), NEVER self-reported by the LLM.
+ *
+ * Per the spec: "Confidence never computed inside the LLM."
  */
 
 import { Logger } from '../../../utils/logger.js';
 import { cachedLLMCall } from '../../../utils/cachedLLM.js';
 import { getIntentRegistry } from '../IntentRegistry.js';
-import { createSuccessEnvelope, createClarificationEnvelope, ClarificationReason, ParameterSource } from '../contracts/IntentParseEnvelope.js';
 import { NLSIntentClassificationSchema } from '../schemas/NLSIntentClassificationSchema.js';
 
 const logger = new Logger('LLMParser');
@@ -20,7 +24,7 @@ RULES:
 1. Select intentId from the allowed list only - DO NOT invent new intents
 2. If unsure or intent unclear, set requiresClarification: true and intentId: null
 3. Extract parameters (patientId, condition, timeRange, urgency) only if clearly present in input
-4. Set confidence based on how clear the user's intent is`;
+4. DO NOT output a confidence score - confidence is computed by the platform`;
 
 export class LLMParser {
   constructor() {
@@ -42,11 +46,15 @@ export class LLMParser {
     this.systemPrompt = SYSTEM_PROMPT.replace('{{INTENT_LIST}}', intentList);
   }
 
+  /**
+   * Parse text and return raw signals for central confidence computation
+   * @returns {Object} Raw parse result with signals (confidence computed by control plane)
+   */
   async parse(text, context = {}) {
     const startTime = Date.now();
 
     if (!this.orchestrator) {
-      return this._createFallback(text, Date.now() - startTime);
+      return this._createFallbackSignals(text, Date.now() - startTime);
     }
 
     try {
@@ -64,107 +72,161 @@ export class LLMParser {
         {
           temperature: 0,
           maxTokens: 500,
-          outputSchema: NLSIntentClassificationSchema, // Claude Structured Outputs - guaranteed valid JSON
+          outputSchema: NLSIntentClassificationSchema,
           cachePrefix: 'nls:intent-parse',
           cacheTTL: 1800
         }
       );
 
       const parseTimeMs = Date.now() - startTime;
-      // With outputSchema, result.data is already parsed and validated
       const parsed = result?.data || result;
 
       if (!parsed || typeof parsed !== 'object') {
-        return this._createFallback(text, parseTimeMs);
+        return this._createFallbackSignals(text, parseTimeMs);
       }
 
-      // Validate intentId is from registry (schema enforces enum, but double-check)
+      // Validate intentId is from registry
       if (parsed.intentId && !this.registry.isKnown(parsed.intentId)) {
         logger.warn(`LLM returned unknown intent: ${parsed.intentId}`);
-        return this._createFallback(text, parseTimeMs);
+        return this._createFallbackSignals(text, parseTimeMs);
       }
 
       if (parsed.requiresClarification || !parsed.intentId) {
-        return this._createClarificationFromLLM(parsed, text, parseTimeMs, context);
+        return this._createClarificationSignals(parsed, text, parseTimeMs, context);
       }
 
-      return this._createSuccessFromLLM(parsed, text, parseTimeMs, context);
+      return this._createSuccessSignals(parsed, text, parseTimeMs, context);
     } catch (error) {
       logger.error('LLM parse error:', error.message);
-      return this._createFallback(text, Date.now() - startTime);
+      return this._createFallbackSignals(text, Date.now() - startTime);
     }
   }
 
-  _createSuccessFromLLM(parsed, originalText, parseTimeMs, context) {
+  _createSuccessSignals(parsed, originalText, parseTimeMs, context) {
     const intent = this.registry.getIntent(parsed.intentId);
-    const parameters = parsed.parameters.map(p => ({
+    const parameters = (parsed.parameters || []).map(p => ({
       name: p.name,
       value: p.value,
-      source: ParameterSource.INFERRED,
-      confidence: p.confidence || parsed.confidence
+      source: 'inferred',
+      // Parameter confidence NOT from LLM - will be set by control plane
     }));
 
     const missingRequired = this.registry.getMissingRequired(parsed.intentId, parameters);
-    if (missingRequired.length > 0) {
-      return createClarificationEnvelope({
-        intentFamily: intent.intentFamily,
-        parameters,
-        parseConfidence: parsed.confidence * 0.8,
-        clarification: {
-          reason: ClarificationReason.MISSING_REQUIRED_PARAMETER,
-          message: `Missing required: ${missingRequired.join(', ')}`,
-          missingParameters: missingRequired
-        },
-        originalText,
-        trace: { parserUsed: 'llm', ruleMatches: [], llmInvoked: true, parseTimeMs },
-        correlationId: context.correlationId
-      });
-    }
+    const totalRequired = intent.requiredParameters?.length || 0;
 
-    return createSuccessEnvelope({
+    // Return raw signals - confidence computed by control plane
+    return {
       intentId: parsed.intentId,
       intentFamily: intent.intentFamily,
       parameters,
-      parseConfidence: parsed.confidence,
       originalText,
-      trace: { parserUsed: 'llm', ruleMatches: [], llmInvoked: true, parseTimeMs },
+
+      // Raw signals for confidence computation (control plane)
+      signals: {
+        matchType: 'llm',
+        tier: 3,
+        // LLM's raw output - NOT used as confidence, just as a signal
+        llmRawConfidence: parsed.confidence || 0.5,
+        queryLength: originalText.length,
+        hasAmbiguity: false,
+        closeMatchCount: 0,
+        totalRequired,
+        missingRequired: missingRequired.length,
+        entityCompleteness: totalRequired > 0
+          ? (totalRequired - missingRequired.length) / totalRequired
+          : 1.0,
+        llmReasoning: parsed.reasoning
+      },
+
+      requiresClarification: missingRequired.length > 0,
+      clarificationReason: missingRequired.length > 0 ? 'missing_required' : null,
+      missingParameters: missingRequired,
+
+      trace: {
+        parserUsed: 'llm',
+        tier: 3,
+        ruleMatches: [],
+        llmInvoked: true,
+        parseTimeMs
+      },
+
       correlationId: context.correlationId
-    });
+    };
   }
 
-  _createClarificationFromLLM(parsed, originalText, parseTimeMs, context) {
-    return createClarificationEnvelope({
+  _createClarificationSignals(parsed, originalText, parseTimeMs, context) {
+    return {
+      intentId: null,
       intentFamily: 'system',
-      parameters: parsed.parameters?.map(p => ({
+      parameters: (parsed.parameters || []).map(p => ({
         name: p.name,
         value: p.value,
-        source: ParameterSource.INFERRED,
-        confidence: p.confidence || parsed.confidence
-      })) || [],
-      parseConfidence: parsed.confidence || 0,
-      clarification: {
-        reason: ClarificationReason.LOW_CONFIDENCE,
-        message: parsed.reasoning || 'Could not determine intent. Try /help for commands.'
-      },
+        source: 'inferred'
+      })),
       originalText,
-      trace: { parserUsed: 'llm', ruleMatches: [], llmInvoked: true, parseTimeMs },
+
+      signals: {
+        matchType: 'llm',
+        tier: 3,
+        llmRawConfidence: parsed.confidence || 0,
+        queryLength: originalText.length,
+        hasAmbiguity: true,
+        closeMatchCount: 0,
+        totalRequired: 0,
+        missingRequired: 0,
+        entityCompleteness: 0.5,
+        llmReasoning: parsed.reasoning
+      },
+
+      requiresClarification: true,
+      clarificationReason: 'low_confidence',
+      clarificationMessage: parsed.reasoning || 'Could not determine intent. Try /help for commands.',
+
+      trace: {
+        parserUsed: 'llm',
+        tier: 3,
+        ruleMatches: [],
+        llmInvoked: true,
+        parseTimeMs
+      },
+
       correlationId: context.correlationId
-    });
+    };
   }
 
-  _createFallback(originalText, parseTimeMs) {
-    return createClarificationEnvelope({
+  _createFallbackSignals(originalText, parseTimeMs) {
+    return {
+      intentId: null,
       intentFamily: 'system',
       parameters: [],
-      parseConfidence: 0,
-      clarification: {
-        reason: ClarificationReason.AMBIGUOUS_INTENT,
-        message: 'Could not understand request. Try /help for available commands.',
-        options: [{ label: 'Show Help', value: 'hc:help', intentId: 'hc:help' }]
-      },
       originalText,
-      trace: { parserUsed: 'llm', ruleMatches: [], llmInvoked: true, parseTimeMs }
-    });
+
+      signals: {
+        matchType: 'llm',
+        tier: 3,
+        llmRawConfidence: 0,
+        queryLength: originalText.length,
+        hasAmbiguity: true,
+        closeMatchCount: 0,
+        totalRequired: 0,
+        missingRequired: 0,
+        entityCompleteness: 0,
+        llmFailed: true
+      },
+
+      requiresClarification: true,
+      clarificationReason: 'ambiguous',
+      clarificationMessage: 'Could not understand request. Try /help for available commands.',
+      ambiguousOptions: [{ label: 'Show Help', value: 'hc:help', intentId: 'hc:help' }],
+
+      trace: {
+        parserUsed: 'llm',
+        tier: 3,
+        ruleMatches: [],
+        llmInvoked: true,
+        parseTimeMs
+      }
+    };
   }
 }
 

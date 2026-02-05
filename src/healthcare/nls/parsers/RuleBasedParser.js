@@ -1,21 +1,24 @@
 /**
  * RuleBasedParser - Deterministic pattern-based intent parsing
+ *
+ * Outputs raw parse signals. Confidence is computed centrally by the
+ * control plane (NLSConfidenceIntegration), never by the parser itself.
  */
 
 import { Logger } from '../../../utils/logger.js';
 import { getIntentRegistry } from '../IntentRegistry.js';
 import { getEntityExtractor } from '../extractors/EntityExtractor.js';
-import { createSuccessEnvelope, createClarificationEnvelope, ClarificationReason, ParameterSource } from '../contracts/IntentParseEnvelope.js';
 
 const logger = new Logger('RuleBasedParser');
 
 class ParseResult {
   constructor() {
     this.intentId = null;
-    this.confidence = 0;
+    this.rawWeight = 0;  // Raw pattern weight - NOT confidence
     this.parameters = [];
-    this.matchType = null;
+    this.matchType = null;  // 'trigger', 'pattern', 'synonym'
     this.matchDetails = null;
+    this.tier = null;  // 1, 2, or 3
   }
 }
 
@@ -25,6 +28,10 @@ export class RuleBasedParser {
     this.entityExtractor = getEntityExtractor();
   }
 
+  /**
+   * Parse text and return raw signals for central confidence computation
+   * @returns {Object|null} Raw parse result with signals (NOT confidence)
+   */
   parse(text, context = {}) {
     const startTime = Date.now();
     const trimmedText = text.trim();
@@ -41,15 +48,11 @@ export class RuleBasedParser {
 
     if (matches.length === 0) return null;
 
-    matches.sort((a, b) => b.confidence - a.confidence);
+    matches.sort((a, b) => b.rawWeight - a.rawWeight);
     const parseTimeMs = Date.now() - startTime;
 
     const topMatch = matches[0];
-    const closeMatches = matches.filter(m => m.intentId !== topMatch.intentId && topMatch.confidence - m.confidence < 0.15);
-
-    if (closeMatches.length > 0 && topMatch.confidence < 0.85) {
-      return this._createAmbiguousResult(matches, trimmedText, parseTimeMs);
-    }
+    const closeMatches = matches.filter(m => m.intentId !== topMatch.intentId && topMatch.rawWeight - m.rawWeight < 0.15);
 
     const additionalEntities = this.entityExtractor.extractAll(trimmedText);
     const mergedEntities = this.entityExtractor.mergeEntities(this._parametersToEntities(topMatch.parameters), additionalEntities);
@@ -58,27 +61,48 @@ export class RuleBasedParser {
     const finalParameters = this.entityExtractor.toParameterArray(finalEntities);
     const missingRequired = this.registry.getMissingRequired(topMatch.intentId, finalParameters);
 
-    if (missingRequired.length > 0) {
-      return createClarificationEnvelope({
-        intentFamily: intent.intentFamily,
-        parameters: finalParameters,
-        parseConfidence: topMatch.confidence * 0.8,
-        clarification: { reason: ClarificationReason.MISSING_REQUIRED_PARAMETER, message: `Missing required parameter(s): ${missingRequired.join(', ')}`, missingParameters: missingRequired },
-        originalText: trimmedText,
-        trace: { parserUsed: 'rule-based', ruleMatches: matches.map(m => ({ pattern: m.matchType, confidence: m.confidence })), llmInvoked: false, parseTimeMs },
-        correlationId: context.correlationId
-      });
-    }
-
-    return createSuccessEnvelope({
+    // Return raw signals for central confidence computation
+    return {
+      // Parse result
       intentId: topMatch.intentId,
       intentFamily: intent.intentFamily,
       parameters: finalParameters,
-      parseConfidence: topMatch.confidence,
       originalText: trimmedText,
-      trace: { parserUsed: 'rule-based', ruleMatches: matches.map(m => ({ pattern: m.matchType, confidence: m.confidence })), llmInvoked: false, parseTimeMs },
+
+      // Raw signals for confidence computation (control plane)
+      signals: {
+        matchType: topMatch.matchType,
+        tier: topMatch.tier,
+        rawWeight: topMatch.rawWeight,
+        queryLength: trimmedText.length,
+        hasAmbiguity: closeMatches.length > 0,
+        closeMatchCount: closeMatches.length,
+        totalRequired: intent.requiredParameters?.length || 0,
+        missingRequired: missingRequired.length,
+        entityCompleteness: intent.requiredParameters?.length > 0
+          ? (intent.requiredParameters.length - missingRequired.length) / intent.requiredParameters.length
+          : 1.0,
+        allMatches: matches.map(m => ({ intentId: m.intentId, matchType: m.matchType, rawWeight: m.rawWeight }))
+      },
+
+      // Clarification info
+      requiresClarification: missingRequired.length > 0 || (closeMatches.length > 0 && topMatch.rawWeight < 0.85),
+      clarificationReason: missingRequired.length > 0 ? 'missing_required' : (closeMatches.length > 0 ? 'ambiguous' : null),
+      missingParameters: missingRequired,
+      ambiguousOptions: closeMatches.length > 0 ? this._buildAmbiguousOptions(matches) : null,
+
+      // Trace for audit (P5)
+      trace: {
+        parserUsed: 'rule-based',
+        tier: topMatch.tier,
+        ruleMatches: matches.map(m => ({ pattern: m.matchType, rawWeight: m.rawWeight, tier: m.tier })),
+        llmInvoked: false,
+        parseTimeMs,
+        ruleTableVersion: this.registry.getRuleTableVersion?.() || 'unknown'
+      },
+
       correlationId: context.correlationId
-    });
+    };
   }
 
   _matchTrigger(text) {
@@ -90,9 +114,10 @@ export class RuleBasedParser {
           const entities = this.entityExtractor.extractAll(remaining);
           const result = new ParseResult();
           result.intentId = intent.intentId;
-          result.confidence = 0.95;
+          result.rawWeight = 0.95;  // Raw weight, NOT confidence
           result.parameters = this.entityExtractor.toParameterArray(entities);
           result.matchType = 'trigger';
+          result.tier = 1;
           result.matchDetails = { trigger, remaining };
           return result;
         }
@@ -112,9 +137,10 @@ export class RuleBasedParser {
             const entities = this.entityExtractor.extractFromGroups(match);
             const result = new ParseResult();
             result.intentId = intent.intentId;
-            result.confidence = pattern.weight;
+            result.rawWeight = pattern.weight;  // Raw weight from pattern
             result.parameters = this.entityExtractor.toParameterArray(entities);
             result.matchType = 'pattern';
+            result.tier = 2;
             result.matchDetails = { pattern: pattern.regex, groups: match.groups };
             matches.push(result);
           }
@@ -133,9 +159,10 @@ export class RuleBasedParser {
           const entities = this.entityExtractor.extractAll(text);
           const result = new ParseResult();
           result.intentId = intent.intentId;
-          result.confidence = 0.6;
+          result.rawWeight = 0.6;  // Raw weight for synonyms
           result.parameters = this.entityExtractor.toParameterArray(entities);
           result.matchType = 'synonym';
+          result.tier = 2;
           result.matchDetails = { synonym };
           matches.push(result);
         }
@@ -144,24 +171,17 @@ export class RuleBasedParser {
     return matches;
   }
 
-  _createAmbiguousResult(matches, originalText, parseTimeMs) {
+  _buildAmbiguousOptions(matches) {
     const seen = new Set();
-    const topIntents = [];
+    const options = [];
     for (const match of matches) {
-      if (!seen.has(match.intentId) && topIntents.length < 4) {
+      if (!seen.has(match.intentId) && options.length < 4) {
         seen.add(match.intentId);
         const intent = this.registry.getIntent(match.intentId);
-        topIntents.push({ label: intent.name, value: match.intentId, intentId: match.intentId });
+        options.push({ label: intent.name, value: match.intentId, intentId: match.intentId });
       }
     }
-    return createClarificationEnvelope({
-      intentFamily: 'system',
-      parameters: matches[0].parameters,
-      parseConfidence: matches[0].confidence * 0.7,
-      clarification: { reason: ClarificationReason.AMBIGUOUS_INTENT, message: 'Multiple possible intents detected. Which did you mean?', options: topIntents },
-      originalText,
-      trace: { parserUsed: 'rule-based', ruleMatches: matches.slice(0, 5).map(m => ({ pattern: m.matchType, confidence: m.confidence })), llmInvoked: false, parseTimeMs }
-    });
+    return options;
   }
 
   _parametersToEntities(parameters) {

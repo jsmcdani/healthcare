@@ -55,13 +55,47 @@ const ClarificationSchema = Joi.object({
 });
 
 const ParseTraceSchema = Joi.object({
-  parserUsed: Joi.string().valid('rule-based', 'llm', 'hybrid').required(),
+  parserUsed: Joi.string().valid('rule-based', 'llm', 'hybrid', 'confirmed').required(),
+  tier: Joi.number().min(0).max(4).optional(),
   ruleMatches: Joi.array().items(Joi.object({
     pattern: Joi.string(),
-    confidence: Joi.number()
+    rawWeight: Joi.number(),
+    tier: Joi.number(),
+    confidence: Joi.number()  // Legacy compatibility
   })).default([]),
   llmInvoked: Joi.boolean().default(false),
-  parseTimeMs: Joi.number().required()
+  parseTimeMs: Joi.number().required(),
+  ruleTableVersion: Joi.string().optional(),
+
+  // Control plane confidence audit trail (P5)
+  confidenceModel: Joi.string().optional(),
+  confidenceModelVersion: Joi.string().optional(),
+  confidenceLevel: Joi.string().valid('HIGH', 'MODERATE', 'LOW', 'UNCERTAIN').optional(),
+  confidenceFactors: Joi.object().optional(),
+  // Penalties can be strings (IDs) or objects with details
+  confidencePenalties: Joi.array().items(
+    Joi.alternatives().try(
+      Joi.string(),
+      Joi.object({
+        id: Joi.string(),
+        value: Joi.number(),
+        reason: Joi.string()
+      })
+    )
+  ).optional(),
+  // Boosts can be strings (IDs) or objects with details
+  confidenceBoosts: Joi.array().items(
+    Joi.alternatives().try(
+      Joi.string(),
+      Joi.object({
+        id: Joi.string(),
+        value: Joi.number(),
+        reason: Joi.string()
+      })
+    )
+  ).optional(),
+  canProceed: Joi.boolean().optional(),
+  safetyFlag: Joi.string().allow(null).optional()
 });
 
 const PayloadSchema = Joi.object({

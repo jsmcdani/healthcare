@@ -6,9 +6,19 @@
  * - Integrates with core contract enforcement
  * - Validates execution against schemas
  * - Supports artifact creation through contracts
+ *
+ * Confidence Integration:
+ * - Central confidence computation for clinical responses
+ * - Same model applies whether LLM or deterministic execution
+ * - Per the spec: "Confidence computed by control plane, never by LLM"
  */
 
 import { Logger } from '../../../utils/logger.js';
+import {
+  calculateClinicalConfidence,
+  buildSignalsFromRecipeResult,
+  initializeClinicalConfidence
+} from '../../confidence/ClinicalConfidenceIntegration.js';
 
 // Contract enforcement integration (lazy load to avoid circular deps)
 let ContractEnforcer = null;
@@ -700,6 +710,87 @@ You must:
     execution.endTime = new Date().toISOString();
     execution.duration = new Date(execution.endTime) - new Date(execution.startTime);
 
+    // ============================================
+    // CENTRAL CONFIDENCE COMPUTATION (Control Plane)
+    // Same model applies whether LLM or deterministic execution
+    // Per spec: "Confidence computed centrally, never by LLM"
+    // ============================================
+    try {
+      // Initialize confidence system if needed
+      initializeClinicalConfidence();
+
+      // Build execution context for model selection
+      const executionContext = {
+        intentId: execution.context.intentId || execution.recipe,
+        intentMode: execution.context.intentMode || 'CLINICAL_DECISION_SUPPORT',
+        recipeId: execution.recipe,
+        decisionType: execution.context.decisionType
+      };
+
+      // Gather signals from execution
+      const llmSteps = execution.steps.filter(s => s.type?.startsWith('llm.'));
+      const failedSteps = execution.steps.filter(s => s.status === 'failed');
+      const completedSteps = execution.steps.filter(s => s.status === 'completed');
+
+      // Check for LLM metadata in step outputs
+      const llmMetadata = execution.outputs.llmMetadata || {};
+
+      // Build signals for confidence calculation
+      const executionSignals = {
+        // Data signals
+        dataCompleteness: this.calculateDataCompleteness(execution.outputs),
+        dataQuality: execution.context.dataQuality ?? 0.6,
+        sourceReliability: execution.context.sourceReliability ?? 0.7,
+        evidenceLevel: execution.context.evidenceLevel ?? 0.6,
+        modelCertainty: llmMetadata.cached ? 0.8 : 0.6,
+        temporalRelevance: execution.context.temporalRelevance ?? 0.7,
+
+        // Execution path signals
+        llmUsed: llmSteps.length > 0,
+        llmFailed: llmSteps.some(s => s.status === 'failed'),
+
+        // Data quality signals
+        missingCritical: execution.context.missingCritical || false,
+        hasDataConflict: execution.context.hasDataConflict || false,
+        syntheticData: execution.context.syntheticData || execution.context.demoMode || false,
+
+        // Positive signals
+        multipleSources: execution.context.multipleSources || false,
+        expertReviewed: execution.context.expertReviewed || false,
+        recentlyValidated: execution.context.recentlyValidated || false,
+
+        // Execution metadata
+        totalSteps: execution.steps.length,
+        completedSteps: completedSteps.length,
+        failedSteps: failedSteps.length,
+        cacheHits: execution.context.cacheHits || 0
+      };
+
+      // Calculate confidence using central computation
+      execution.confidence = calculateClinicalConfidence(executionContext, executionSignals);
+
+      this.logger.info('Clinical confidence computed for recipe', {
+        recipe: execution.recipe,
+        modelId: execution.confidence.modelId,
+        confidence: execution.confidence.value,
+        level: execution.confidence.level,
+        canProceed: execution.confidence.canProceed,
+        llmUsed: executionSignals.llmUsed
+      });
+
+    } catch (confidenceError) {
+      this.logger.warn('Failed to compute clinical confidence', { error: confidenceError.message });
+      // Provide fallback confidence indicating uncertainty
+      execution.confidence = {
+        value: 0,
+        level: 'UNCERTAIN',
+        canProceed: false,
+        safetyFlag: 'COMPUTATION_ERROR',
+        modelId: 'fallback',
+        reason: confidenceError.message
+      };
+    }
+
     // Store decision artifact if graph available
     if (this.graphService && execution.status !== 'blocked') {
       try {
@@ -711,7 +802,9 @@ You must:
           intentMode: execution.context.intentMode,
           recipeExecuted: execution.recipe,
           stepsCompleted: execution.steps.filter(s => s.status === 'completed').length,
-          errors: execution.errors
+          errors: execution.errors,
+          // Include confidence in decision artifact for audit trail
+          confidence: execution.confidence
         });
       } catch (e) {
         this.logger.debug('Failed to store decision artifact:', e.message);
@@ -721,10 +814,39 @@ You must:
     this.logger.info(`Recipe execution complete: ${execution.recipe}`, {
       executionId: execution.id,
       status: execution.status,
-      duration: execution.duration
+      duration: execution.duration,
+      confidence: execution.confidence?.level
     });
 
     return execution;
+  }
+
+  /**
+   * Calculate data completeness from outputs
+   */
+  calculateDataCompleteness(outputs) {
+    if (!outputs || typeof outputs !== 'object') return 0.5;
+
+    let totalFields = 0;
+    let populatedFields = 0;
+
+    const countFields = (obj, depth = 0) => {
+      if (depth > 3 || !obj || typeof obj !== 'object') return;
+      for (const key of Object.keys(obj)) {
+        if (key.startsWith('_') || key === 'llmMetadata') continue; // Skip internal fields
+        totalFields++;
+        const value = obj[key];
+        if (value !== null && value !== undefined && value !== '') {
+          populatedFields++;
+        }
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          countFields(value, depth + 1);
+        }
+      }
+    };
+
+    countFields(outputs);
+    return totalFields > 0 ? populatedFields / totalFields : 0.5;
   }
 
   /**
