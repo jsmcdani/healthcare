@@ -53,7 +53,7 @@ export const ErrorPayloadSchema = z.object({
   message: z.string().describe('Human-readable error message'),
   category: ErrorCategorySchema,
   severity: ErrorSeveritySchema,
-  details: z.record(z.any()).optional().describe('Additional error details'),
+  details: z.record(z.string(), z.any()).optional().describe('Additional error details'),
   path: z.string().optional().describe('JSON path or location of error'),
   source: z.object({
     component: z.string(),

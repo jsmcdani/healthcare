@@ -12,7 +12,7 @@ import { SchemaIds } from '../schema-ids.js';
 /**
  * Step input parameters - the actual data for the step
  */
-export const StepInputParamsSchema = z.record(z.any()).describe('Step parameters as key-value pairs');
+export const StepInputParamsSchema = z.record(z.string(), z.any()).describe('Step parameters as key-value pairs');
 
 /**
  * Step context passed to execution
@@ -30,7 +30,7 @@ export const StepContextSchema = z.object({
 /**
  * Prior step results available to this step
  */
-export const PriorResultsSchema = z.record(z.any()).describe('Results from prior steps');
+export const PriorResultsSchema = z.record(z.string(), z.any()).describe('Results from prior steps');
 
 /**
  * Step Input Envelope payload

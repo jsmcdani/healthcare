@@ -26,8 +26,8 @@ export const RequestContextSchema = z.object({
  */
 export const RequestPayloadSchema = z.object({
   context: RequestContextSchema,
-  body: z.record(z.any()).describe('Request body parameters'),
-  query: z.record(z.any()).optional().describe('Query string parameters'),
+  body: z.record(z.string(), z.any()).describe('Request body parameters'),
+  query: z.record(z.string(), z.any()).optional().describe('Query string parameters'),
   pathParams: z.record(z.string()).optional().describe('URL path parameters')
 });
 
