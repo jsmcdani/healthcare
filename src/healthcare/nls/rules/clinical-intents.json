@@ -1,0 +1,136 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-05T00:00:00.000Z",
+  "description": "Clinical intent definitions for Healthcare Intent Classification System",
+  "intents": [
+    {
+      "intentId": "clinical.staging.readiness",
+      "domain": "staging",
+      "name": "Staging Readiness Assessment",
+      "description": "Assess whether a patient meets clinical staging readiness criteria based on their current health status, recent labs, and care plan completion",
+      "intentFamily": "clinical",
+      "triggers": [
+        "/staging-readiness",
+        "/staging",
+        "/stage-check"
+      ],
+      "patterns": [
+        {
+          "regex": "^/staging(?:-readiness)?\\s+(?<patientId>[\\w-]+)$",
+          "weight": 0.95
+        },
+        {
+          "regex": "staging\\s+readiness\\s+(?:for\\s+)?(?:patient\\s+)?(?<patientId>[A-Z]{2,3}-?\\d{3,10})",
+          "weight": 0.85
+        },
+        {
+          "regex": "(?:is|check\\s+if)\\s+(?:patient\\s+)?(?<patientId>[\\w-]+)\\s+ready\\s+for\\s+staging",
+          "weight": 0.8
+        },
+        {
+          "regex": "ready\\s+(?:for\\s+)?staging\\s+(?:patient\\s+)?(?<patientId>[\\w-]+)",
+          "weight": 0.75
+        }
+      ],
+      "synonyms": [
+        "staging assessment",
+        "stage readiness",
+        "ready for staging",
+        "staging criteria"
+      ],
+      "requiredParameters": [
+        {
+          "name": "patientId",
+          "type": "patientId",
+          "description": "Patient identifier (MRN, ID, or system ID)"
+        }
+      ],
+      "optionalParameters": [
+        {
+          "name": "stagingType",
+          "type": "string",
+          "description": "Type of staging (e.g., cancer, kidney_disease)",
+          "defaultValue": "general"
+        }
+      ],
+      "recipe": "clinical-staging-readiness",
+      "requiresConfirmation": false,
+      "clinicalSafetyLevel": "advisory",
+      "examples": [
+        "/staging-readiness P001",
+        "/staging MRN-12345",
+        "staging readiness for patient P001",
+        "is patient MRN-456 ready for staging",
+        "check if P001 ready for staging"
+      ]
+    },
+    {
+      "intentId": "clinical.med_safety.check",
+      "domain": "medication_safety",
+      "name": "Medication Safety Check",
+      "description": "Check for drug-drug interactions, contraindications, allergies, and other medication safety concerns",
+      "intentFamily": "clinical",
+      "triggers": [
+        "/med-safety",
+        "/drug-check",
+        "/ddi",
+        "/medication-check"
+      ],
+      "patterns": [
+        {
+          "regex": "^/(?:med-safety|drug-check|ddi)(?:\\s+(?<patientId>[\\w-]+))?(?:\\s+(?<medications>.+))?$",
+          "weight": 0.95
+        },
+        {
+          "regex": "drug\\s+(?:drug\\s+)?interaction(?:s)?\\s+(?:for\\s+)?(?:patient\\s+)?(?<patientId>[\\w-]+)?",
+          "weight": 0.85
+        },
+        {
+          "regex": "medication\\s+safety\\s+(?:check\\s+)?(?:for\\s+)?(?:patient\\s+)?(?<patientId>[\\w-]+)?",
+          "weight": 0.85
+        },
+        {
+          "regex": "check\\s+(?:for\\s+)?(?:drug\\s+)?interactions?\\s+(?:between\\s+)?(?<medications>.+)",
+          "weight": 0.8
+        },
+        {
+          "regex": "(?:is|are)\\s+(?<medications>.+)\\s+safe\\s+(?:together|to\\s+take)",
+          "weight": 0.75
+        }
+      ],
+      "synonyms": [
+        "drug interaction",
+        "medication interaction",
+        "drug safety",
+        "med check",
+        "DDI check",
+        "contraindication"
+      ],
+      "requiredParameters": [],
+      "optionalParameters": [
+        {
+          "name": "patientId",
+          "type": "patientId",
+          "description": "Patient identifier for context-aware checking"
+        },
+        {
+          "name": "medications",
+          "type": "string",
+          "description": "Medications to check (comma-separated or free text)"
+        }
+      ],
+      "recipe": "medication-safety-check",
+      "requiresConfirmation": false,
+      "clinicalSafetyLevel": "advisory",
+      "examples": [
+        "/med-safety P001",
+        "/ddi metformin, lisinopril",
+        "/drug-check",
+        "drug interaction check for patient P001",
+        "medication safety for MRN-12345",
+        "check for interactions between aspirin and warfarin",
+        "is metoprolol and amlodipine safe together"
+      ]
+    }
+  ]
+}

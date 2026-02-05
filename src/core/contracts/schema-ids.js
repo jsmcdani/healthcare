@@ -51,7 +51,12 @@ export const SchemaIds = {
   CALIBRATION_TEST_CASE: 'correctness.calibration.test_case',
   CALIBRATION_RUN: 'correctness.calibration.run',
   EXPERT_REVIEW: 'correctness.review.expert',
-  OUTCOME_RECORD: 'correctness.feedback.outcome'
+  OUTCOME_RECORD: 'correctness.feedback.outcome',
+
+  // Intent Classification (Phase 10)
+  INTENT_PARSE_REQUEST: 'intent.parse.request',
+  INTENT_PARSE: 'intent.parse',
+  INTENT_CONFIRM: 'intent.confirm'
 };
 
 export default SchemaIds;
