@@ -5,8 +5,12 @@
   "intents": [
     {
       "id": "hc:patient-summary",
+      "tier": "1",
       "description": "Retrieve and summarize patient information with clinical context",
       "triggers": ["/patient", "/patient-summary", "/summary"],
+      "entities": {
+        "patientId": { "type": "string", "extractFrom": "args", "required": true }
+      },
       "patterns": [
         { "regex": "(?:show|get|view).*patient.*(?:summary|info|details)?", "weight": 0.9 },
         { "regex": "patient\\s+(?:overview|status|record)", "weight": 0.9 },
@@ -18,8 +22,12 @@
     },
     {
       "id": "hc:treatment-recommendation",
+      "tier": "1",
       "description": "Provide evidence-based treatment recommendations with clinical guidelines",
       "triggers": ["/treatment", "/treat", "/therapy", "/recommend"],
+      "entities": {
+        "condition": { "type": "string", "extractFrom": "args", "required": true }
+      },
       "patterns": [
         { "regex": "(?:treatment|therapy)\\s+(?:for|recommendation)", "weight": 0.95 },
         { "regex": "how\\s+(?:to|should)\\s+treat", "weight": 0.9 },
@@ -32,8 +40,12 @@
     },
     {
       "id": "hc:care-gaps",
+      "tier": "1",
       "description": "Identify care gaps and overdue screenings for a patient",
       "triggers": ["/care-gaps", "/gaps", "/screenings"],
+      "entities": {
+        "patientId": { "type": "string", "extractFrom": "args", "required": true }
+      },
       "patterns": [
         { "regex": "care\\s+gaps?", "weight": 0.95 },
         { "regex": "(?:overdue|missing|needed)\\s+(?:screening|test|exam)", "weight": 0.9 },
@@ -45,8 +57,13 @@
     },
     {
       "id": "hc:emergency-triage",
+      "tier": "1",
       "description": "Emergency triage assessment for urgent situations",
       "triggers": ["/emergency", "/triage", "/urgent"],
+      "entities": {
+        "patientId": { "type": "string", "extractFrom": "args", "required": true },
+        "chiefComplaint": { "type": "string", "extractFrom": "args", "required": false }
+      },
       "patterns": [
         { "regex": "(?:emergency|urgent|critical|stat)\\s+(?:triage|assessment)?", "weight": 0.95 },
         { "regex": "(?:code\\s+blue|cardiac\\s+arrest|chest\\s+pain|difficulty\\s+breathing)", "weight": 0.98 },
@@ -58,6 +75,7 @@
     },
     {
       "id": "hc:help",
+      "tier": "1",
       "description": "Show available healthcare commands",
       "triggers": ["/help", "/commands", "/?"],
       "patterns": [
