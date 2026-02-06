@@ -1,13 +1,16 @@
 /**
- * NLSConfidenceIntegration - Control Plane Confidence Computation
+ * NLSConfidenceIntegration - Control Plane Confidence for NLS
  *
- * Central confidence computation for NLS, following the Metalligent architecture:
- * - Confidence is ALWAYS computed by the platform (control plane)
- * - Confidence is NEVER self-reported by the LLM
- * - Uses Confidence Registry for model selection
- * - Same model applies whether LLM or rules were used for parsing
+ * Loads confidence model + signal mappings from versioned pack.
+ * NO hardcoded confidence logic — all values from pack/registry.
  *
- * Per the spec (connfidenc.xml):
+ * Architecture: Mount Sinai InfEHR approach
+ *   - Deterministic scoring (0-1) from weighted factors
+ *   - Explainability (full factor breakdown in every result)
+ *   - Clinical gating (canProceed flag blocks action when confidence insufficient)
+ *   - "I don't know" safety (uncertaintyTriggers → refuse rather than guess)
+ *
+ * Per architecture (connfidenc.xml):
  * "Confidence is computed centrally (registry-driven) and pinned by version
  *  across deterministic execution and AI expert consultation —
  *  never self-reported by the LLM."
@@ -22,87 +25,154 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logger = new Logger('NLSConfidenceIntegration');
 
-// Parser tier reliability scores - control plane determines reliability, not the parser
-const TIER_RELIABILITY = {
-  'trigger': 1.0,      // Tier 1: Exact slash command match (highest reliability)
-  'pattern': 0.8,      // Tier 2: Regex pattern match
-  'synonym': 0.6,      // Tier 2b: Synonym match
-  'llm': 0.65,         // Tier 3: LLM semantic classification
-  'confirmed': 1.0,    // User confirmed intent (highest reliability)
-  'none': 0.0          // No match found
-};
-
+// State — all loaded from pack, nothing hardcoded
 let calculator = null;
-let modelDefinition = null;
+let packData = null;
+let tierReliability = null;
+let queryClarity = null;
 
 /**
- * Initialize the NLS confidence calculator
+ * Initialize the NLS confidence system from versioned pack.
+ * Fails with CONFIGURATION ERROR if pack is missing or invalid — no silent fallbacks.
  */
 export function initializeNLSConfidence() {
   if (calculator) return calculator;
 
+  const packPath = path.resolve(__dirname, '../packs/confidence/nls-intent-parsing.confidence.json');
+
+  // Load pack — fail loud if missing
+  let packJson;
   try {
-    // Load NLS confidence model
-    const modelPath = path.resolve(__dirname, '../packs/confidence/nls-intent-parsing.confidence.json');
-    const modelJson = fs.readFileSync(modelPath, 'utf-8');
-    modelDefinition = JSON.parse(modelJson);
-
-    calculator = new ConfidenceCalculator(modelDefinition);
-    logger.info('NLS confidence calculator initialized', {
-      modelId: modelDefinition.modelId,
-      modelVersion: modelDefinition.modelVersion
-    });
-
-    return calculator;
+    packJson = fs.readFileSync(packPath, 'utf-8');
   } catch (error) {
-    logger.error('Failed to initialize NLS confidence calculator', { error: error.message });
-    return null;
+    const msg = `CONFIGURATION ERROR: NLS confidence pack not found at ${packPath}. ` +
+      'Confidence computation requires a valid pack. Status: REQUIRES_REVIEW';
+    logger.error(msg, { error: error.message });
+    throw new Error(msg);
   }
+
+  // Parse — fail loud if invalid JSON
+  try {
+    packData = JSON.parse(packJson);
+  } catch (error) {
+    const msg = 'CONFIGURATION ERROR: NLS confidence pack contains invalid JSON. ' +
+      'Status: REQUIRES_REVIEW';
+    logger.error(msg, { error: error.message });
+    throw new Error(msg);
+  }
+
+  // Validate required pack sections — no guessing, no defaults
+  if (!packData.modelId || !packData.modelVersion) {
+    throw new Error(
+      'CONFIGURATION ERROR: NLS confidence pack missing modelId or modelVersion. ' +
+      'Status: REQUIRES_REVIEW'
+    );
+  }
+
+  if (!packData.signalMappings) {
+    throw new Error(
+      'CONFIGURATION ERROR: NLS confidence pack missing signalMappings section. ' +
+      'Tier reliability and query clarity must be defined in the pack. ' +
+      'Status: REQUIRES_REVIEW'
+    );
+  }
+
+  if (!packData.signalMappings.tierReliability) {
+    throw new Error(
+      'CONFIGURATION ERROR: NLS confidence pack missing signalMappings.tierReliability. ' +
+      'Status: REQUIRES_REVIEW'
+    );
+  }
+
+  if (!packData.signalMappings.queryClarity) {
+    throw new Error(
+      'CONFIGURATION ERROR: NLS confidence pack missing signalMappings.queryClarity. ' +
+      'Status: REQUIRES_REVIEW'
+    );
+  }
+
+  // Load signal mappings from pack
+  tierReliability = packData.signalMappings.tierReliability;
+  queryClarity = packData.signalMappings.queryClarity;
+
+  // Create calculator from model definition (Zod-validated by ConfidenceCalculator)
+  calculator = new ConfidenceCalculator(packData);
+
+  logger.info('NLS confidence initialized from pack', {
+    modelId: packData.modelId,
+    modelVersion: packData.modelVersion,
+    tierMappings: Object.keys(tierReliability),
+    clarityBrackets: queryClarity.brackets?.length || 0
+  });
+
+  return calculator;
 }
 
 /**
- * Calculate calibrated confidence for a parse result
+ * Calculate calibrated confidence for a parse result.
  *
- * @param {Object} parseContext - Context from the parser
- * @param {string} parseContext.matchType - 'trigger', 'pattern', 'synonym', or 'llm'
- * @param {number} parseContext.rawConfidence - Raw parser confidence (pattern weight or LLM output)
+ * All factor values derived from pack-defined signal mappings.
+ * Conditions derived from deterministic parse signals only.
+ * Version pinned in result for audit trail (P5).
+ *
+ * @param {Object} parseContext - Deterministic signals from parser
+ * @param {string} parseContext.matchType - 'trigger', 'pattern', 'synonym', 'llm', 'confirmed', 'none'
+ * @param {number} parseContext.rawConfidence - Raw parser weight (pattern weight or LLM output)
  * @param {number} parseContext.entityCompleteness - 0-1 ratio of extracted vs required entities
  * @param {number} parseContext.queryLength - Length of user query
  * @param {boolean} parseContext.hasAmbiguity - Whether close matches exist
  * @param {boolean} parseContext.missingRequired - Whether required params are missing
  * @param {number} parseContext.closeMatchCount - Number of close competing matches
- * @returns {Object} Calibrated confidence result with value, level, canProceed
+ * @returns {Object} Calibrated confidence result with value, level, canProceed, pinned versions
  */
 export function calculateNLSConfidence(parseContext) {
   if (!calculator) {
-    initializeNLSConfidence();
+    initializeNLSConfidence(); // Throws if pack missing — no fallback
   }
 
-  if (!calculator) {
-    // Fallback if model couldn't load - return simple confidence
-    return {
-      value: parseContext.rawConfidence || 0.5,
-      level: parseContext.rawConfidence >= 0.85 ? 'HIGH' :
-             parseContext.rawConfidence >= 0.65 ? 'MODERATE' :
-             parseContext.rawConfidence >= 0.40 ? 'LOW' : 'UNCERTAIN',
-      canProceed: parseContext.rawConfidence >= 0.40,
-      modelId: 'fallback',
-      safetyFlag: null
-    };
-  }
-
-  // Build factors from parse context
+  // Map signals to factors using pack-defined mappings (not hardcoded)
   const factors = {
-    model_certainty: parseContext.rawConfidence || 0.5,
-    source_reliability: TIER_RELIABILITY[parseContext.matchType] || 0.5,
+    model_certainty: parseContext.rawConfidence || 0,
+    source_reliability: tierReliability[parseContext.matchType] ?? tierReliability['none'] ?? 0,
     data_completeness: parseContext.entityCompleteness ?? 1.0,
-    data_quality: calculateQueryClarity(parseContext.queryLength)
+    data_quality: resolveQueryClarity(parseContext.queryLength)
   };
 
-  // Build conditions from parse context
+  // Build conditions from deterministic parse signals
+  const conditions = buildConditions(parseContext);
+
+  // Calculate via ConfidenceCalculator (model-driven, not hardcoded)
+  const result = calculator.calculate({ factors, conditions });
+
+  // Pin pack version in result for audit trail (P5)
+  result.packVersion = packData.modelVersion;
+  result.modelId = packData.modelId;
+  result.modelVersion = packData.modelVersion;
+
+  logger.debug('NLS confidence calculated', {
+    matchType: parseContext.matchType,
+    rawConfidence: parseContext.rawConfidence,
+    calibratedConfidence: result.value,
+    level: result.level,
+    model: `${packData.modelId}@${packData.modelVersion}`,
+    factors,
+    conditions,
+    penalties: result.penalties,
+    boosts: result.boosts
+  });
+
+  return result;
+}
+
+/**
+ * Build conditions array from deterministic parse signals.
+ * Maps boolean parse signals to condition strings that match
+ * penalty/boost definitions in the pack model.
+ */
+function buildConditions(parseContext) {
   const conditions = [];
 
-  // Penalties
+  // Penalties (conditions matching pack penalty definitions)
   if (parseContext.hasAmbiguity || (parseContext.closeMatchCount && parseContext.closeMatchCount > 0)) {
     conditions.push('ambiguousIntent');
   }
@@ -121,7 +191,7 @@ export function calculateNLSConfidence(parseContext) {
     conditions.push('partialEntityMatch');
   }
 
-  // Boosts
+  // Boosts (conditions matching pack boost definitions)
   if (parseContext.matchType === 'trigger') {
     conditions.push('exactTriggerMatch');
   }
@@ -135,48 +205,37 @@ export function calculateNLSConfidence(parseContext) {
     conditions.push('singleClearMatch');
   }
 
-  // Check for uncertainty triggers
+  // Uncertainty triggers (conditions matching pack uncertaintyTriggers)
   if (!parseContext.intentId && parseContext.matchType !== 'llm') {
     conditions.push('no_intent_match');
   }
   if (parseContext.llmFailed) {
-    conditions.push('llmFallback');  // Extra penalty when LLM failed completely
+    conditions.push('llmFallback');
     conditions.push('no_intent_match');
   }
   if (parseContext.matchType === 'none') {
     conditions.push('no_intent_match');
   }
 
-  const result = calculator.calculate({ factors, conditions });
-
-  logger.debug('NLS confidence calculated', {
-    matchType: parseContext.matchType,
-    rawConfidence: parseContext.rawConfidence,
-    calibratedConfidence: result.value,
-    level: result.level,
-    factors,
-    conditions,
-    penalties: result.penalties,
-    boosts: result.boosts
-  });
-
-  return result;
+  return conditions;
 }
 
 /**
- * Calculate query clarity based on length (very short queries are often ambiguous)
+ * Resolve query clarity from pack-defined brackets.
+ * All thresholds come from pack signalMappings.queryClarity.
  */
-function calculateQueryClarity(queryLength) {
-  if (!queryLength) return 0.7;
+function resolveQueryClarity(queryLength) {
+  if (!queryLength) return queryClarity.default;
 
-  // Very short queries (< 5 chars) are often ambiguous
-  if (queryLength < 5) return 0.3;
-  // Short queries (5-15 chars) might be commands or brief requests
-  if (queryLength < 15) return 0.6;
-  // Medium queries (15-50 chars) typically provide enough context
-  if (queryLength < 50) return 0.8;
-  // Longer queries usually have good context
-  return 0.9;
+  if (queryClarity.brackets) {
+    for (const bracket of queryClarity.brackets) {
+      if (queryLength < bracket.maxLength) {
+        return bracket.value;
+      }
+    }
+  }
+
+  return queryClarity.aboveAll ?? queryClarity.default;
 }
 
 /**
@@ -187,15 +246,11 @@ export function explainNLSConfidence(parseContext) {
     initializeNLSConfidence();
   }
 
-  if (!calculator) {
-    return { error: 'Confidence calculator not available' };
-  }
-
   const factors = {
-    model_certainty: parseContext.rawConfidence || 0.5,
-    source_reliability: TIER_RELIABILITY[parseContext.matchType] || 0.5,
+    model_certainty: parseContext.rawConfidence || 0,
+    source_reliability: tierReliability[parseContext.matchType] ?? tierReliability['none'] ?? 0,
     data_completeness: parseContext.entityCompleteness ?? 1.0,
-    data_quality: calculateQueryClarity(parseContext.queryLength)
+    data_quality: resolveQueryClarity(parseContext.queryLength)
   };
 
   const conditions = [];
@@ -208,14 +263,25 @@ export function explainNLSConfidence(parseContext) {
 }
 
 /**
- * Get the loaded model info
+ * Get loaded model info including pack version and signal mapping metadata
  */
 export function getNLSConfidenceModelInfo() {
   if (!calculator) {
     initializeNLSConfidence();
   }
 
-  return calculator ? calculator.getModelInfo() : null;
+  const info = calculator.getModelInfo();
+  return {
+    ...info,
+    packVersion: packData?.modelVersion,
+    signalMappings: {
+      tierReliabilityKeys: tierReliability ? Object.keys(tierReliability) : [],
+      queryClarity: queryClarity ? {
+        brackets: queryClarity.brackets?.length || 0,
+        default: queryClarity.default
+      } : null
+    }
+  };
 }
 
 export default {

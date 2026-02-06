@@ -109,6 +109,26 @@
     "outside_intent_allowlist"
   ],
 
+  "signalMappings": {
+    "tierReliability": {
+      "trigger": 1.0,
+      "pattern": 0.8,
+      "synonym": 0.6,
+      "llm": 0.65,
+      "confirmed": 1.0,
+      "none": 0.0
+    },
+    "queryClarity": {
+      "default": 0.7,
+      "brackets": [
+        { "maxLength": 5, "value": 0.3 },
+        { "maxLength": 15, "value": 0.6 },
+        { "maxLength": 50, "value": 0.8 }
+      ],
+      "aboveAll": 0.9
+    }
+  },
+
   "metadata": {
     "createdAt": "2025-02-05T00:00:00.000Z",
     "author": "Metalligent Healthcare",

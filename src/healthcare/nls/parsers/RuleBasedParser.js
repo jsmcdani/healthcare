@@ -89,7 +89,7 @@ export class RuleBasedParser {
       requiresClarification: missingRequired.length > 0 || (closeMatches.length > 0 && topMatch.rawWeight < 0.85),
       clarificationReason: missingRequired.length > 0 ? 'missing_required' : (closeMatches.length > 0 ? 'ambiguous' : null),
       missingParameters: missingRequired,
-      ambiguousOptions: closeMatches.length > 0 ? this._buildAmbiguousOptions(matches) : null,
+      ambiguousOptions: closeMatches.length > 0 ? this._buildAmbiguousOptions(matches) : [],
 
       // Trace for audit (P5)
       trace: {
@@ -111,7 +111,26 @@ export class RuleBasedParser {
       for (const trigger of intent.triggers) {
         if (firstWord === trigger.toLowerCase()) {
           const remaining = text.substring(trigger.length).trim();
-          const entities = this.entityExtractor.extractAll(remaining);
+
+          // Use the intent's own patterns (named groups) first — they know
+          // exactly which parameter each capture belongs to
+          let entities = {};
+          for (const pattern of intent.patterns) {
+            try {
+              const regex = new RegExp(pattern.regex, 'i');
+              const match = text.match(regex);
+              if (match && match.groups) {
+                entities = this.entityExtractor.extractFromGroups(match);
+                break;
+              }
+            } catch (e) { /* skip invalid regex */ }
+          }
+
+          // Fall back to generic extraction only if no named groups matched
+          if (Object.keys(entities).length === 0 && remaining) {
+            entities = this.entityExtractor.extractAll(remaining);
+          }
+
           const result = new ParseResult();
           result.intentId = intent.intentId;
           result.rawWeight = 0.95;  // Raw weight, NOT confidence

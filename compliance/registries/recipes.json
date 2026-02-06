@@ -1,0 +1,929 @@
+{
+  "version": "1.0.0",
+  "recipes": [
+    {
+      "id": "apex-refactor",
+      "description": "Analyze Apex code quality and generate prioritized refactoring plan with effort estimates",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/riskScore",
+        "llm/recommend",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-summary",
+      "description": "Overview of Apex triggers and classes - STATIC (no LLM)",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/top",
+        "compute/aggregate",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "automation-summary",
+      "description": "Overview of all automation: workflows, flows, process builders - STATIC (no LLM)",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/top",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "change-history",
+      "description": "Historical view of metadata changes over a specified period",
+      "steps": [
+        "compute/filter",
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/filter"
+      ],
+      "branches": []
+    },
+    {
+      "id": "compliance-risk",
+      "description": "Identify PII exposure and compliance risks (GDPR, CCPA, HIPAA)",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/riskScore",
+        "compute/classify"
+      ],
+      "branches": []
+    },
+    {
+      "id": "connected-apps",
+      "description": "Discover and analyze connected apps, API integrations, and external system connections",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "data-model-analysis",
+      "description": "Analyze object relationships and data model structure",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/filter"
+      ],
+      "branches": []
+    },
+    {
+      "id": "field-impact-graph",
+      "description": "Visualize the impact neighborhood of a specific field - what depends on it and what it depends on",
+      "steps": [
+        "analysis.fieldImpactGraph",
+        "compute/riskScore",
+        "format/graph"
+      ],
+      "branches": []
+    },
+    {
+      "id": "field-inventory",
+      "description": "List fields on an object with types and usage - STATIC (no LLM)",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/top",
+        "format/table",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "field-rationalize",
+      "description": "Analyze field sprawl and generate safe field cleanup/consolidation plan",
+      "steps": [
+        "haven/query",
+        "haven/orphanedFields",
+        "haven/query",
+        "haven/query",
+        "compute/riskScore",
+        "llm/recommend",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "full-inventory",
+      "description": "Comprehensive catalog of all metadata in the org",
+      "steps": [
+        "analysis/orgSummary",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query"
+      ],
+      "branches": []
+    },
+    {
+      "id": "hypothesis-comprehensive",
+      "description": "Full impact analysis for hypothetical changes with AI-powered remediation planning",
+      "steps": [
+        "llm/extract",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "compute/aggregate",
+        "compute/riskScore",
+        "llm/analyze",
+        "llm/recommend"
+      ],
+      "branches": []
+    },
+    {
+      "id": "impact-analysis",
+      "description": "Analyze the blast radius and downstream impact of a proposed change",
+      "steps": [
+        "compute/filter",
+        "compute/filter",
+        "haven/getCachedStats",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "compute/aggregate",
+        "compute/riskScore",
+        "llm/analyze",
+        "llm/recommend"
+      ],
+      "branches": []
+    },
+    {
+      "id": "inactive-users",
+      "description": "Find automation referencing inactive or deactivated users",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query"
+      ],
+      "branches": []
+    },
+    {
+      "id": "label-mismatch",
+      "description": "Classify field label/API mismatches into COSMETIC, DRIFT, or BREAK categories",
+      "steps": [
+        "haven/query",
+        "compute/filter",
+        "compute/transform",
+        "compute/partition",
+        "compute/aggregate",
+        "compute/sort",
+        "compute/filter",
+        "compute/filter"
+      ],
+      "branches": []
+    },
+    {
+      "id": "llm-reasoning",
+      "description": "Uses LLM to answer complex questions that don't match predefined intents",
+      "steps": [
+        "cache/get",
+        "haven/query",
+        "llm/classify",
+        "haven/query",
+        "llm/answer",
+        "llm/classify"
+      ],
+      "branches": []
+    },
+    {
+      "id": "metadata-changes",
+      "description": "Show recent metadata changes and drift detection",
+      "steps": [
+        "haven/query",
+        "compute/aggregate",
+        "compute/filter",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "metadata-search",
+      "description": "Search across all metadata types for a keyword or pattern",
+      "steps": [
+        "analysis/search",
+        "compute/aggregate",
+        "compute/top"
+      ],
+      "branches": []
+    },
+    {
+      "id": "object-automation",
+      "description": "All automation on a specific object - STATIC (no LLM)",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "object-compare",
+      "description": "Compare two objects side-by-side - STATIC (no LLM)",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/merge",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "object-inventory",
+      "description": "List and analyze objects from object_permissions data",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "format/table",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "permissions-exposure",
+      "description": "Identify who has access to a specific field or object",
+      "steps": [
+        "compute/parse",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/filter",
+        "compute/count"
+      ],
+      "branches": []
+    },
+    {
+      "id": "profile-compare",
+      "description": "Compare permissions between two profiles or permission sets",
+      "steps": [
+        "analysis/comparePermissions",
+        "haven/query",
+        "haven/query",
+        "compute/filter"
+      ],
+      "branches": []
+    },
+    {
+      "id": "profile-summary",
+      "description": "Overview of profiles and permission sets - STATIC (no LLM)",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "format/table",
+        "format/table",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "security-audit",
+      "description": "Comprehensive security analysis including permission exposure, profile analysis, and access patterns",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/filter",
+        "compute/aggregate",
+        "compute/filter",
+        "llm/analyze",
+        "llm/recommend",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "security-fix",
+      "description": "Identify over-permissioned profiles and generate step-by-step security hardening plan",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/riskScore",
+        "llm/recommend",
+        "llm/analyze",
+        "llm/analyze",
+        "llm/analyze",
+        "llm/analyze",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "sharing-analysis",
+      "description": "Analyze sharing rules, OWD settings, and record access",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "compute/aggregate",
+        "compute/filter"
+      ],
+      "branches": []
+    },
+    {
+      "id": "show-help",
+      "description": "Show available commands and capabilities (generic fallback)",
+      "steps": [],
+      "branches": []
+    },
+    {
+      "id": "system-status",
+      "description": "Overview of org metadata and system health - STATIC (no LLM)",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "user-cleanup-plan",
+      "description": "Find inactive users embedded in ALL Salesforce infrastructure (queues, groups, workflows, flows, email alerts, assignment rules) and generate safe cleanup plan with replacements",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "compute/merge",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/riskScore",
+        "llm/analyze",
+        "llm/recommend",
+        "llm/analyze",
+        "llm/analyze",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "validation-rules-summary",
+      "description": "Overview of validation rules - STATIC (no LLM)",
+      "steps": [
+        "haven/query",
+        "compute/filter",
+        "compute/merge",
+        "compute/merge",
+        "compute/aggregate",
+        "compute/top",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "workflow-summary",
+      "description": "Summary of workflow rules in the org",
+      "steps": [
+        "cache/get",
+        "returnCached",
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate",
+        "compute/aggregate",
+        "format/table",
+        "cache/set"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-class-analysis",
+      "description": "Deep LLM-powered analysis of a specific Apex class",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "data/context",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-dependencies",
+      "description": "Analyze class dependency graph - what calls what",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-overview",
+      "description": "Complete inventory and analysis of Apex classes and triggers",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "compute/apex-summary"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-risks",
+      "description": "Find governor limit risks, code quality issues, and anti-patterns",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-trigger-analysis",
+      "description": "Analyze Apex trigger execution order and potential conflicts for an object",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "data/context",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "execution-model",
+      "description": "Salesforce 20-step order of execution for all automations on an object",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "execution-risks",
+      "description": "Analyze risks and conflicts in the execution order for an object",
+      "steps": [
+        "getModel",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "execution-timeline",
+      "description": "Visual timeline of Salesforce's 20-step execution order for an object",
+      "steps": [
+        "getModel"
+      ],
+      "branches": []
+    },
+    {
+      "id": "show-help:execution-explorer",
+      "description": "Show available commands for the Execution Explorer",
+      "steps": [],
+      "branches": []
+    },
+    {
+      "id": "dependency-map",
+      "description": "Show what a flow affects - objects touched, fields updated, actions called",
+      "steps": [
+        "flowAnalyzer/dependencyMap"
+      ],
+      "branches": []
+    },
+    {
+      "id": "field-impact",
+      "description": "Find all flows that read or write a specific field - useful for impact analysis before field changes",
+      "steps": [
+        "flowAnalyzer/fieldImpact"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-active",
+      "description": "List all active record-triggered flows",
+      "steps": [
+        "haven/query",
+        "compute/aggregate",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-analyze-single",
+      "description": "Deep LLM-powered analysis of a specific flow with description, tech debt, and recommendations",
+      "steps": [
+        "flowOptimizer/llmAnalyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-by-object",
+      "description": "Record-triggered flows grouped by their trigger object using FlowOptimizerService",
+      "steps": [
+        "flowOptimizer/byObject"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-coalesce-opportunities",
+      "description": "Find objects with multiple record-triggered flows that can be coalesced using FlowOptimizerService",
+      "steps": [
+        "flowOptimizer/coalesceOpportunities"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-compare",
+      "description": "Side-by-side comparison of two flows showing differences in elements, conditions, and fields touched",
+      "steps": [
+        "flowAnalyzer/compare"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-complexity",
+      "description": "Analyze flow complexity and technical debt indicators",
+      "steps": [
+        "haven/query",
+        "compute/filter",
+        "compute/filter",
+        "compute/aggregate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-describe",
+      "description": "Find undocumented flows and generate documentation using LLM via FlowOptimizerService",
+      "steps": [
+        "flowOptimizer/undocumented"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-duplicates",
+      "description": "Find flows with identical decision conditions, record updates, or action calls",
+      "steps": [
+        "flowOptimizer.duplicateLogic"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-full-tech-debt-scan",
+      "description": "Comprehensive tech debt analysis - runs all 4 detection types in parallel",
+      "steps": [
+        "flowOptimizer.fullTechDebtScan"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-loop-issues",
+      "description": "Find flows with DML operations inside loops (governor limit anti-pattern)",
+      "steps": [
+        "flowOptimizer.loopOptimization"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-optimize",
+      "description": "Comprehensive optimization analysis - identifies flows by: RecordTypeId portability issues, complexity, missing documentation, and coalesce opportunities",
+      "steps": [
+        "flowOptimizer/summary",
+        "recordTypeOptimizer/scan",
+        "flowOptimizer/coalesceOpportunities",
+        "flowOptimizer/undocumented",
+        "flowOptimizer/buildOptimizationCandidates"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-paths",
+      "description": "Analyze all execution paths through a flow - find dead code, calculate complexity, and identify all possible branches",
+      "steps": [
+        "flowAnalyzer/paths"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-remediate",
+      "description": "Generate detailed LLM-powered remediation plan for a specific flow's tech debt issues",
+      "steps": [
+        "flowOptimizer.remediateTechDebt"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-simulate",
+      "description": "Simulate flow execution with synthetic test data - walk through all paths and generate test cases",
+      "steps": [
+        "flowAnalyzer/simulate"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-soql-consolidation",
+      "description": "Find multiple Get Records queries on the same object that could be consolidated",
+      "steps": [
+        "flowOptimizer.soqlConsolidation"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-summary",
+      "description": "Overview of all record-triggered flows in the org using FlowOptimizerService",
+      "steps": [
+        "flowOptimizer/summary"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-tech-debt",
+      "description": "Comprehensive technical debt analysis for Record-Triggered Flows with LLM-powered insights",
+      "steps": [
+        "flowOptimizer/summary",
+        "flowOptimizer/batchAnalyze",
+        "flowOptimizer/undocumented",
+        "flowOptimizer/coalesceOpportunities"
+      ],
+      "branches": []
+    },
+    {
+      "id": "flow-unused-vars",
+      "description": "Find flows with unused variables, formulas, or constants that should be cleaned up",
+      "steps": [
+        "flowOptimizer.unusedVariables"
+      ],
+      "branches": []
+    },
+    {
+      "id": "health-scan",
+      "description": "Bulk health check on all record-triggered flows with prioritized issue list",
+      "steps": [
+        "flowAnalyzer/healthScan"
+      ],
+      "branches": []
+    },
+    {
+      "id": "recordtype-portability",
+      "description": "Find flows with hardcoded RecordTypeIds that will break when deployed across orgs",
+      "steps": [
+        "recordTypeOptimizer/scan"
+      ],
+      "branches": []
+    },
+    {
+      "id": "show-help:flow-optimizer",
+      "description": "Show available Flow Optimizer commands and capabilities",
+      "steps": [],
+      "branches": []
+    },
+    {
+      "id": "trigger-order",
+      "description": "Show execution order for record-triggered flows on the same object",
+      "steps": [
+        "flowAnalyzer/triggerOrder"
+      ],
+      "branches": []
+    },
+    {
+      "id": "mule-credentials",
+      "description": "All named credentials",
+      "steps": [
+        "haven/query"
+      ],
+      "branches": []
+    },
+    {
+      "id": "mule-services",
+      "description": "All external services",
+      "steps": [
+        "haven/query"
+      ],
+      "branches": []
+    },
+    {
+      "id": "action-plan",
+      "description": "Generate a prioritized remediation roadmap with effort estimates",
+      "steps": [
+        "recipe/execute",
+        "recipe/execute",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "apex-code-quality",
+      "description": "Analyze Apex code for quality issues, dependencies, field references, and risks",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "blast-radius",
+      "description": "Analyze the impact radius of changing a specific field or component",
+      "steps": [
+        "transform/parse",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "coupling-analysis",
+      "description": "Identify components with excessive dependencies that increase change risk",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "debt-summary",
+      "description": "Technical debt analysis with correct taxonomy: Automation Complexity, Schema Coupling, Declarative Logic",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "field-risk-analysis",
+      "description": "Identify objects with excessive custom fields approaching governor limits",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "formula-analysis",
+      "description": "Identify deeply nested and complex formula fields that are hard to maintain",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "hypothesis-analysis",
+      "description": "Analyze the impact of hypothetical changes before making them",
+      "steps": [
+        "llm/extract",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "migration-roadmap",
+      "description": "Plan migration of legacy workflows and process builders to flows",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "orphaned-analysis",
+      "description": "Find unused fields, classes, and components that can be safely removed",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "prioritized-debt",
+      "description": "Rank technical debt items by severity and business impact",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "quick-wins",
+      "description": "Identify high-impact, low-effort technical debt fixes",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "risk-cluster-view",
+      "description": "Identify clusters of high-risk components that should be addressed together",
+      "steps": [
+        "haven/query",
+        "haven/query",
+        "llm/analyze"
+      ],
+      "branches": []
+    },
+    {
+      "id": "show-help:technical-debt",
+      "description": "Show available commands and capabilities",
+      "steps": [],
+      "branches": []
+    }
+  ]
+}
