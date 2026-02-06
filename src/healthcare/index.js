@@ -156,7 +156,7 @@ export async function createHealthcareStack(options = {}) {
      * This is the main entry point for the healthcare AI assistant
      */
     async chat(query, context = {}) {
-      return await orchestrator.processRequest({ query }, context);
+      return await orchestrator.process({ query }, context);
     },
 
     /**

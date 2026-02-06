@@ -391,6 +391,226 @@
             color: #0891b2;
         }
 
+        /* Patient Summary Cards */
+        .patient-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+            border-radius: 12px;
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .patient-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .patient-info h2 {
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            color: white;
+        }
+
+        .patient-demographics {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .patient-demographics span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .confidence-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #f0fdf4;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #bbf7d0;
+        }
+
+        .confidence-bar.medium {
+            background: #fffbeb;
+            border-color: #fde68a;
+        }
+
+        .confidence-bar.low {
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        .confidence-meter {
+            flex: 1;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .confidence-fill.high { background: #16a34a; }
+        .confidence-fill.medium { background: #d97706; }
+        .confidence-fill.low { background: #dc2626; }
+
+        .confidence-label {
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .confidence-proceed {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .confidence-proceed.yes {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .confidence-proceed.no {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .clinical-section {
+            margin: 12px 0;
+        }
+
+        .clinical-section h3 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin: 0 0 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .clinical-section h3 i {
+            color: #0891b2;
+            font-size: 14px;
+        }
+
+        .clinical-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .clinical-table th {
+            text-align: left;
+            padding: 6px 10px;
+            background: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .clinical-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #1e293b;
+        }
+
+        .clinical-table tr:hover td {
+            background: #f8fafc;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pill.active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-pill.completed {
+            background: #e0f2fe;
+            color: #0c4a6e;
+        }
+
+        .status-pill.inactive, .status-pill.discontinued {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .severity-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .severity-dot.severe, .severity-dot.critical { background: #dc2626; }
+        .severity-dot.moderate, .severity-dot.high { background: #d97706; }
+        .severity-dot.mild, .severity-dot.medium { background: #eab308; }
+        .severity-dot.low { background: #16a34a; }
+        .severity-dot.unknown { background: #94a3b8; }
+
+        .alert-card {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+        }
+
+        .alert-card.critical {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .alert-card.warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+        }
+
+        .empty-state {
+            padding: 12px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 12px;
+            font-style: italic;
+        }
+
         /* Input Area */
         .input-area {
             padding: 16px 20px;
@@ -1096,7 +1316,8 @@
             try {
 
                 const requestBody = {
-                    query: parsed.isCommand ? parsed.args || parsed.command : query,
+                    // Always send the full query - backend handles slash commands
+                    query: query,
                     context: {
                         mode: currentMode,
                         intentMode: currentMode,
@@ -1194,54 +1415,24 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message assistant';
 
-            let html = '<div class="message-bubble">';
+            let html = '<div class="message-bubble" style="max-width: 90%;">';
 
-            // Summary
-            if (data.data?.summary || data.summary) {
-                html += `<h2>${data.data?.summary || data.summary}</h2>`;
+            // Route to type-specific renderer
+            if (data.type === 'patient_summary' && data.data?.patient) {
+                html += renderPatientSummary(data);
+            } else if (data.type === 'drug_interaction' && data.data) {
+                html += renderDrugCheck(data);
+            } else if (data.type === 'care_gaps' && data.data) {
+                html += renderCareGaps(data);
+            } else if (data.type === 'treatment_recommendation' && data.data) {
+                html += renderTreatmentRec(data);
+            } else if (data.type === 'differential_diagnosis' && data.data) {
+                html += renderDifferentialDiagnosis(data);
+            } else {
+                html += renderGenericResponse(data);
             }
 
-            // Compliance status
-            if (data.compliance_status) {
-                html += `<span class="compliance-badge ${data.compliance_status}">${data.compliance_status.replace('_', ' ').toUpperCase()}</span>`;
-            }
-
-            // Root cause
-            if (data.data?.root_cause) {
-                html += `<h3>Root Cause</h3><p>${data.data.root_cause}</p>`;
-            }
-
-            // Confidence
-            if (data.data?.confidence) {
-                html += `<p><strong>Confidence:</strong> ${Math.round(data.data.confidence * 100)}%</p>`;
-            }
-
-            // Findings
-            if (data.data?.findings?.length > 0) {
-                html += '<h3>Findings</h3>';
-                data.data.findings.forEach(f => {
-                    html += `<div class="finding ${f.severity}">
-                        <div class="finding-severity">${f.severity}</div>
-                        ${f.message}
-                        ${f.evidence ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Evidence: ${f.evidence}</div>` : ''}
-                    </div>`;
-                });
-            }
-
-            // Recommended actions
-            if (data.suggested_actions?.length > 0) {
-                html += '<h3>Recommended Actions</h3><div class="action-buttons">';
-                data.suggested_actions.forEach(a => {
-                    const riskClass = a.risk_score > 5 ? 'risk-high' : '';
-                    html += `<button class="action-btn ${riskClass}" onclick="executeAction('${a.action}', '${a.target || ''}')">
-                        ${a.action}
-                        ${a.risk_score ? `<span class="risk-badge">Risk: ${a.risk_score}/10</span>` : ''}
-                    </button>`;
-                });
-                html += '</div>';
-            }
-
-            // Reasoning chain
+            // Reasoning chain (always available)
             if (data.reasoning?.length > 0) {
                 const reasoningId = 'reasoning-' + Date.now();
                 html += `<button class="reasoning-toggle" onclick="toggleReasoning('${reasoningId}')">
@@ -1259,15 +1450,452 @@
                 html += '</div>';
             }
 
+            html += '</div>';
+            messageDiv.innerHTML = html;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function renderPatientSummary(data) {
+            const p = data.data.patient || {};
+            const diagnoses = data.data.diagnoses || [];
+            const medications = data.data.medications || [];
+            const encounters = data.data.recentEncounters || [];
+            const alerts = data.data.alerts || [];
+            const conf = data.data.confidence != null ? data.data.confidence : null;
+            const confLevel = (data.data.confidenceLevel || 'unknown').toLowerCase();
+            const canProceed = data.data.canProceed;
+            const confPercent = conf != null ? Math.round(conf <= 1 ? conf * 100 : conf) : null;
+
+            let html = '';
+
+            // Patient header card
+            const initials = ((p.name || '').split(' ').map(n => n[0]).join('') || '?').toUpperCase();
+            const age = p.age || (p.dob ? calculateAge(p.dob) : '');
+            html += `<div class="patient-header">
+                <div class="patient-avatar">${initials}</div>
+                <div class="patient-info">
+                    <h2>${escHtml(p.name || p.id || 'Unknown')}</h2>
+                    <div class="patient-demographics">
+                        ${p.id ? `<span><i class="bi bi-person-badge"></i> ${escHtml(p.id)}</span>` : ''}
+                        ${age ? `<span><i class="bi bi-calendar"></i> Age ${age}</span>` : ''}
+                        ${p.gender ? `<span><i class="bi bi-gender-ambiguous"></i> ${escHtml(p.gender)}</span>` : ''}
+                        ${p.dob ? `<span><i class="bi bi-calendar-heart"></i> DOB ${escHtml(p.dob)}</span>` : ''}
+                    </div>
+                </div>
+            </div>`;
+
+            // Confidence bar
+            if (confPercent != null) {
+                const confClass = confPercent >= 70 ? 'high' : confPercent >= 40 ? 'medium' : 'low';
+                const barClass = confPercent >= 70 ? '' : confPercent >= 40 ? 'medium' : 'low';
+                html += `<div class="confidence-bar ${barClass}">
+                    <span class="confidence-label">${confPercent}% ${confLevel.toUpperCase()}</span>
+                    <div class="confidence-meter">
+                        <div class="confidence-fill ${confClass}" style="width: ${confPercent}%"></div>
+                    </div>
+                    <span class="confidence-proceed ${canProceed ? 'yes' : 'no'}">
+                        ${canProceed ? '<i class="bi bi-check-circle"></i> Proceed' : '<i class="bi bi-x-circle"></i> Review'}
+                    </span>
+                </div>`;
+            }
+
+            // Alerts
+            if (alerts.length > 0) {
+                alerts.forEach(a => {
+                    const cls = (a.severity || 'warning').toLowerCase() === 'critical' ? 'critical' : 'warning';
+                    html += `<div class="alert-card ${cls}">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span>${escHtml(a.message || a)}</span>
+                    </div>`;
+                });
+            }
+
+            // Diagnoses
+            html += `<div class="clinical-section">
+                <h3><i class="bi bi-clipboard2-pulse"></i> Diagnoses (${diagnoses.length})</h3>`;
+            if (diagnoses.length > 0) {
+                html += `<table class="clinical-table">
+                    <thead><tr><th>ICD</th><th>Description</th><th>Severity</th><th>Date</th><th>Status</th></tr></thead><tbody>`;
+                diagnoses.forEach(d => {
+                    const sev = (d.severity || '').toLowerCase();
+                    html += `<tr>
+                        <td><code>${escHtml(d.icdCode || d.code || '-')}</code></td>
+                        <td>${escHtml(d.description || d.name || 'Unknown')}</td>
+                        <td>${sev ? `<span class="severity-dot ${sev}"></span>${sev}` : '-'}</td>
+                        <td>${escHtml(d.diagnosisDate || d.onsetDate || d.date || '-')}</td>
+                        <td><span class="status-pill ${(d.status || '').toLowerCase()}">${escHtml(d.status || '-')}</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state">No diagnoses on record</div>';
+            }
+            html += '</div>';
+
+            // Medications
+            html += `<div class="clinical-section">
+                <h3><i class="bi bi-capsule"></i> Medications (${medications.length})</h3>`;
+            if (medications.length > 0) {
+                html += `<table class="clinical-table">
+                    <thead><tr><th>Medication</th><th>Dosage</th><th>Frequency</th><th>Route</th><th>Status</th></tr></thead><tbody>`;
+                medications.forEach(m => {
+                    const dosageStr = m.dosage && m.unit ? `${m.dosage} ${m.unit}` : (m.dosage || '-');
+                    html += `<tr>
+                        <td>${escHtml(m.name || m.genericName || 'Unknown')}</td>
+                        <td>${escHtml(dosageStr)}</td>
+                        <td>${escHtml(m.frequency || '-')}</td>
+                        <td>${escHtml(m.route || '-')}</td>
+                        <td><span class="status-pill ${(m.status || '').toLowerCase()}">${escHtml(m.status || '-')}</span></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state">No medications on record</div>';
+            }
+            html += '</div>';
+
+            // Encounters
+            if (encounters.length > 0) {
+                html += `<div class="clinical-section">
+                    <h3><i class="bi bi-hospital"></i> Recent Encounters (${encounters.length})</h3>
+                    <table class="clinical-table">
+                    <thead><tr><th>Date</th><th>Type</th><th>Provider</th><th>Reason</th></tr></thead><tbody>`;
+                encounters.forEach(e => {
+                    html += `<tr>
+                        <td>${escHtml(e.date || e.admitDate || e.encounterDate || '-')}</td>
+                        <td>${escHtml(e.type || e.encounterType || '-')}</td>
+                        <td>${escHtml(e.provider || e.providerName || '-')}</td>
+                        <td>${escHtml(e.reason || e.chiefComplaint || '-')}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div>';
+            }
+
+            // Suggested actions
+            if (data.suggested_actions?.length > 0) {
+                html += '<div class="clinical-section"><h3><i class="bi bi-lightning"></i> Recommended Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    const riskClass = a.risk_score > 5 ? 'risk-high' : '';
+                    html += `<button class="action-btn ${riskClass}" onclick="executeAction('${a.action}', '${a.target || ''}')">
+                        ${a.action}
+                        ${a.risk_score ? `<span class="risk-badge">Risk: ${a.risk_score}/10</span>` : ''}
+                    </button>`;
+                });
+                html += '</div></div>';
+            }
+
+            return html;
+        }
+
+        function renderDrugCheck(data) {
+            let html = '';
+            html += `<h2><i class="bi bi-shield-check"></i> ${escHtml(data.data?.summary || 'Drug Interaction Check')}</h2>`;
+            if (data.data?.confidence != null) {
+                const pct = Math.round((data.data.confidence <= 1 ? data.data.confidence * 100 : data.data.confidence));
+                html += `<p><strong>Confidence:</strong> ${pct}% ${data.data.confidenceLevel || ''}</p>`;
+            }
+            if (data.data?.findings?.length > 0) {
+                data.data.findings.forEach(f => {
+                    html += `<div class="finding ${f.severity || 'info'}">
+                        <div class="finding-severity">${f.severity || 'info'}</div>
+                        ${escHtml(f.message)}
+                        ${f.evidence ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Evidence: ${escHtml(f.evidence)}</div>` : ''}
+                    </div>`;
+                });
+            }
+            return html;
+        }
+
+        function renderCareGaps(data) {
+            const d = data.data;
+            const gaps = d.careGaps || [];
+            const conf = d.confidence != null ? d.confidence : null;
+            const confLevel = (d.confidenceLevel || '').toLowerCase();
+            const confPercent = conf != null ? Math.round(conf <= 1 ? conf * 100 : conf) : null;
+            let html = '';
+
+            // Header
+            html += `<div class="patient-header" style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);">
+                <div class="patient-avatar"><i class="bi bi-clipboard-check"></i></div>
+                <div class="patient-info">
+                    <h2>Care Gap Analysis</h2>
+                    <div class="patient-demographics">
+                        <span><i class="bi bi-person"></i> ${escHtml(d.patientName || '')}</span>
+                        <span><i class="bi bi-exclamation-circle"></i> ${gaps.length} gap(s) identified</span>
+                        ${d.complianceScore != null ? `<span><i class="bi bi-bar-chart"></i> Compliance: ${d.complianceScore}%</span>` : ''}
+                    </div>
+                </div>
+            </div>`;
+
+            // Confidence bar
+            if (confPercent != null) {
+                const confClass = confPercent >= 70 ? 'high' : confPercent >= 40 ? 'medium' : 'low';
+                const barClass = confPercent >= 70 ? '' : confPercent >= 40 ? 'medium' : 'low';
+                html += `<div class="confidence-bar ${barClass}">
+                    <span class="confidence-label">${confPercent}% ${confLevel.toUpperCase()}</span>
+                    <div class="confidence-meter">
+                        <div class="confidence-fill ${confClass}" style="width: ${confPercent}%"></div>
+                    </div>
+                    <span class="confidence-proceed ${d.canProceed ? 'yes' : 'no'}">
+                        ${d.canProceed ? '<i class="bi bi-check-circle"></i> Proceed' : '<i class="bi bi-x-circle"></i> Review'}
+                    </span>
+                </div>`;
+            }
+
+            // Care gaps table
+            html += `<div class="clinical-section">
+                <h3><i class="bi bi-exclamation-triangle"></i> Care Gaps (${gaps.length})</h3>`;
+            if (gaps.length > 0) {
+                html += `<table class="clinical-table">
+                    <thead><tr><th>Measure</th><th>Status</th><th>Priority</th><th>Due</th><th>Standard</th></tr></thead><tbody>`;
+                gaps.forEach(g => {
+                    const prioClass = (g.priority || '').toLowerCase() === 'high' ? 'critical' :
+                                      (g.priority || '').toLowerCase() === 'medium' ? 'high' : 'low';
+                    html += `<tr>
+                        <td><strong>${escHtml(g.name || g.measureName || '-')}</strong></td>
+                        <td>${escHtml(g.status || '-')}</td>
+                        <td><span class="status-pill ${prioClass}">${escHtml(g.priority || '-')}</span></td>
+                        <td>${escHtml(g.dueDate || '-')}</td>
+                        <td><code>${escHtml(g.measure || '-')}</code></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state">No care gaps identified - patient is up to date</div>';
+            }
+            html += '</div>';
+
+            // Suggested actions
+            if (data.suggested_actions?.length > 0) {
+                html += '<div class="clinical-section"><h3><i class="bi bi-lightning"></i> Recommended Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    html += `<button class="action-btn" onclick="executeAction('${escHtml(a.action)}', '')">
+                        ${escHtml(a.action)}
+                        ${a.priority ? `<span class="risk-badge">${escHtml(a.priority)}</span>` : ''}
+                    </button>`;
+                });
+                html += '</div></div>';
+            }
+
+            return html;
+        }
+
+        function renderTreatmentRec(data) {
+            const d = data.data;
+            let html = '';
+            html += `<div class="patient-header" style="background: linear-gradient(135deg, #059669 0%, #047857 100%);">
+                <div class="patient-avatar"><i class="bi bi-heart-pulse"></i></div>
+                <div class="patient-info">
+                    <h2>Treatment Recommendation</h2>
+                    <div class="patient-demographics">
+                        <span>${escHtml(d.summary || data.summary || '')}</span>
+                    </div>
+                </div>
+            </div>`;
+
+            if (d.confidence != null) {
+                const pct = Math.round((d.confidence <= 1 ? d.confidence * 100 : d.confidence));
+                const confClass = pct >= 70 ? 'high' : pct >= 40 ? 'medium' : 'low';
+                html += `<div class="confidence-bar ${pct >= 70 ? '' : pct >= 40 ? 'medium' : 'low'}">
+                    <span class="confidence-label">${pct}% ${(d.confidenceLevel || '').toUpperCase()}</span>
+                    <div class="confidence-meter"><div class="confidence-fill ${confClass}" style="width: ${pct}%"></div></div>
+                </div>`;
+            }
+
+            if (d.findings?.length > 0) {
+                html += '<div class="clinical-section"><h3><i class="bi bi-clipboard2-pulse"></i> Recommendations</h3>';
+                d.findings.forEach(f => {
+                    html += `<div class="finding ${f.severity || 'info'}">
+                        <div class="finding-severity">${escHtml(f.severity || 'info')}</div>
+                        ${escHtml(f.message)}
+                        ${f.evidence ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Evidence: ${escHtml(f.evidence)}</div>` : ''}
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            if (data.suggested_actions?.length > 0) {
+                html += '<div class="clinical-section"><h3><i class="bi bi-lightning"></i> Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    html += `<button class="action-btn" onclick="executeAction('${escHtml(a.action)}', '')">${escHtml(a.action)}</button>`;
+                });
+                html += '</div></div>';
+            }
+
+            return html;
+        }
+
+        function renderDifferentialDiagnosis(data) {
+            const d = data.data;
+            const differentials = d.differentials || [];
+            const conf = d.confidence != null ? d.confidence : null;
+            const confLevel = (d.confidenceLevel || '').toLowerCase();
+            const confPercent = conf != null ? Math.round(conf <= 1 ? conf * 100 : conf) : null;
+            let html = '';
+
+            // Header
+            html += `<div class="patient-header" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+                <div class="patient-avatar"><i class="bi bi-file-medical"></i></div>
+                <div class="patient-info">
+                    <h2>Differential Diagnosis</h2>
+                    <div class="patient-demographics">
+                        <span><i class="bi bi-search"></i> ${escHtml(d.symptoms || '')}</span>
+                        ${d.matchedCategory ? `<span><i class="bi bi-check-circle"></i> Matched: ${escHtml(d.matchedCategory)}</span>` : ''}
+                        <span><i class="bi bi-list-ol"></i> ${differentials.length} differential(s)</span>
+                    </div>
+                </div>
+            </div>`;
+
+            // Confidence bar
+            if (confPercent != null) {
+                const confClass = confPercent >= 70 ? 'high' : confPercent >= 40 ? 'medium' : 'low';
+                const barClass = confPercent >= 70 ? '' : confPercent >= 40 ? 'medium' : 'low';
+                html += `<div class="confidence-bar ${barClass}">
+                    <span class="confidence-label">${confPercent}% ${confLevel.toUpperCase()}</span>
+                    <div class="confidence-meter">
+                        <div class="confidence-fill ${confClass}" style="width: ${confPercent}%"></div>
+                    </div>
+                    <span class="confidence-proceed ${d.canProceed ? 'yes' : 'no'}">
+                        ${d.canProceed ? '<i class="bi bi-check-circle"></i> Proceed' : '<i class="bi bi-x-circle"></i> Review'}
+                    </span>
+                </div>`;
+            }
+
+            // Differentials table
+            html += `<div class="clinical-section">
+                <h3><i class="bi bi-diagram-3"></i> Differential Diagnoses (${differentials.length})</h3>`;
+            if (differentials.length > 0) {
+                html += `<table class="clinical-table">
+                    <thead><tr><th>Diagnosis</th><th>ICD-10</th><th>Probability</th><th>Severity</th><th>Workup</th></tr></thead><tbody>`;
+                differentials.forEach(dx => {
+                    const sevClass = (dx.severity || '').toLowerCase();
+                    const probLabel = (dx.probability || 'unknown').toLowerCase();
+                    const probClass = probLabel === 'high' ? 'active' : probLabel === 'medium' ? 'completed' : 'inactive';
+                    html += `<tr>
+                        <td><strong>${escHtml(dx.diagnosis || '-')}</strong></td>
+                        <td><code>${escHtml(dx.icd10 || '-')}</code></td>
+                        <td><span class="status-pill ${probClass}">${escHtml(dx.probability || '-')}</span></td>
+                        <td><span class="severity-dot ${sevClass}"></span>${escHtml(dx.severity || '-')}</td>
+                        <td>${(dx.workup || []).map(w => escHtml(w)).join(', ') || '-'}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            html += '</div>';
+
+            // Red flags section
+            const allRedFlags = differentials.filter(dx => dx.redFlags?.length > 0);
+            if (allRedFlags.length > 0) {
+                html += `<div class="clinical-section">
+                    <h3><i class="bi bi-exclamation-triangle"></i> Red Flags to Assess</h3>`;
+                allRedFlags.forEach(dx => {
+                    const cls = dx.severity === 'critical' ? 'critical' : dx.severity === 'high' ? 'warning' : 'warning';
+                    html += `<div class="alert-card ${cls}">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span><strong>${escHtml(dx.diagnosis)}:</strong> ${dx.redFlags.map(f => escHtml(f)).join(', ')}</span>
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            // LLM analysis if available
+            if (d.llmAnalysis) {
+                html += `<div class="clinical-section">
+                    <h3><i class="bi bi-robot"></i> AI-Augmented Analysis</h3>
+                    <div style="padding: 10px; background: #f8fafc; border-radius: 8px; font-size: 12px; white-space: pre-wrap;">${escHtml(d.llmAnalysis)}</div>
+                </div>`;
+            }
+
+            // Recommended actions
+            if (data.suggested_actions?.length > 0) {
+                html += '<div class="clinical-section"><h3><i class="bi bi-lightning"></i> Recommended Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    const urgentClass = a.priority === 'urgent' ? 'risk-high' : '';
+                    html += `<button class="action-btn ${urgentClass}" onclick="executeAction('${escHtml(a.action)}', '')">
+                        ${escHtml(a.action)}
+                        ${a.priority ? `<span class="risk-badge">${escHtml(a.priority)}</span>` : ''}
+                    </button>`;
+                });
+                html += '</div></div>';
+            }
+
+            return html;
+        }
+
+        function renderGenericResponse(data) {
+            let html = '';
+
+            // Summary
+            if (data.data?.summary || data.summary) {
+                html += `<h2>${escHtml(data.data?.summary || data.summary)}</h2>`;
+            }
+
+            // Compliance status
+            if (data.compliance_status) {
+                const status = typeof data.compliance_status === 'string'
+                    ? data.compliance_status
+                    : (data.compliance_status.source || data.compliance_status.status || 'compliant');
+                html += `<span class="compliance-badge">${String(status).replace('_', ' ')}</span>`;
+            }
+
+            // Root cause
+            if (data.data?.root_cause) {
+                html += `<h3>Root Cause</h3><p>${escHtml(data.data.root_cause)}</p>`;
+            }
+
+            // Confidence
+            if (data.data?.confidence != null) {
+                const pct = Math.round((data.data.confidence <= 1 ? data.data.confidence * 100 : data.data.confidence));
+                html += `<p><strong>Confidence:</strong> ${pct}%</p>`;
+            }
+
+            // Findings
+            if (data.data?.findings?.length > 0) {
+                html += '<h3>Findings</h3>';
+                data.data.findings.forEach(f => {
+                    html += `<div class="finding ${f.severity || 'info'}">
+                        <div class="finding-severity">${f.severity || 'info'}</div>
+                        ${escHtml(f.message)}
+                        ${f.evidence ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Evidence: ${escHtml(f.evidence)}</div>` : ''}
+                    </div>`;
+                });
+            }
+
+            // Recommended actions
+            if (data.suggested_actions?.length > 0) {
+                html += '<h3>Recommended Actions</h3><div class="action-buttons">';
+                data.suggested_actions.forEach(a => {
+                    const riskClass = a.risk_score > 5 ? 'risk-high' : '';
+                    html += `<button class="action-btn ${riskClass}" onclick="executeAction('${a.action}', '${a.target || ''}')">
+                        ${a.action}
+                        ${a.risk_score ? `<span class="risk-badge">Risk: ${a.risk_score}/10</span>` : ''}
+                    </button>`;
+                });
+                html += '</div>';
+            }
+
             // Fallback to markdown
             if (data.markdown && !data.data?.summary) {
                 html += marked.parse(data.markdown);
             }
 
-            html += '</div>';
-            messageDiv.innerHTML = html;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return html;
+        }
+
+        function escHtml(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function calculateAge(dob) {
+            if (!dob) return '';
+            const birth = new Date(dob);
+            const now = new Date();
+            let age = now.getFullYear() - birth.getFullYear();
+            const m = now.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+            return age;
         }
 
         function addLoading() {

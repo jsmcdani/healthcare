@@ -153,13 +153,17 @@ export class IntentRouter {
       return { allowed: true, policiesApplied: [] };
     }
     
-    return await this.policyEngine.evaluate({
-      request,
+    const result = await this.policyEngine.validateOperation({
       mode: mode.id,
       intent: intent.id,
       user: request.user,
       patientId: request.patientId
-    });
+    }, { request });
+
+    return {
+      allowed: result.allowed,
+      policiesApplied: result.trace || []
+    };
   }
 
   /**

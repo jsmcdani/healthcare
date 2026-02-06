@@ -93,5 +93,13 @@ export { LLMParser, createLLMParser } from './parsers/LLMParser.js';
 // Entity extraction
 export { EntityExtractor, getEntityExtractor } from './extractors/EntityExtractor.js';
 
+// Confidence integration (P4: dual confidence with calibrated scoring)
+export {
+  initializeNLSConfidence,
+  calculateNLSConfidence,
+  explainNLSConfidence,
+  getNLSConfidenceModelInfo
+} from './NLSConfidenceIntegration.js';
+
 // Default export
 export { getNaturalLanguageService as default } from './NaturalLanguageService.js';

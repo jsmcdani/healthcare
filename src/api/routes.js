@@ -10432,7 +10432,7 @@ export function routes(orchestrator, eventSystem) {
   // HEALTHCARE ROUTES - Always loaded
   // =====================================================
   router.use("/healthcare/analytics", healthcareAnalyticsRoutes);
-  router.use("/healthcare", healthcareRoutes);
+  router.use("/healthcare", healthcareRoutes(orchestrator));
 
   // =====================================================
   // SALESFORCE ROUTES - Only in non-healthcare mode

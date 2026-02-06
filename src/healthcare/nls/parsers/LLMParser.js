@@ -104,12 +104,15 @@ export class LLMParser {
 
   _createSuccessSignals(parsed, originalText, parseTimeMs, context) {
     const intent = this.registry.getIntent(parsed.intentId);
-    const parameters = (parsed.parameters || []).map(p => ({
-      name: p.name,
-      value: p.value,
-      source: 'inferred',
-      // Parameter confidence NOT from LLM - will be set by control plane
-    }));
+    // Only include parameters that have confidence - no made-up values
+    const parameters = (parsed.parameters || [])
+      .filter(p => p.confidence !== undefined && p.confidence !== null)
+      .map(p => ({
+        name: p.name,
+        value: p.value,
+        source: 'inferred',
+        confidence: p.confidence
+      }));
 
     const missingRequired = this.registry.getMissingRequired(parsed.intentId, parameters);
     const totalRequired = intent.requiredParameters?.length || 0;

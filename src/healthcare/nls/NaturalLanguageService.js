@@ -203,8 +203,8 @@ export class NaturalLanguageService {
         clarification: {
           reason,
           message: parseResult.clarificationMessage || this._getClarificationMessage(parseResult),
-          options: parseResult.ambiguousOptions,
-          missingParameters: parseResult.missingParameters
+          options: parseResult.ambiguousOptions || [],
+          missingParameters: parseResult.missingParameters || []
         },
         originalText: parseResult.originalText,
         trace,

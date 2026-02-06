@@ -79,21 +79,52 @@ const FALLBACK_INTENTS = [
     intentFamily: IntentFamily.CLINICAL,
     domain: 'treatment',
     name: 'Treatment Recommendation',
-    description: 'Get treatment recommendations for a patient condition',
-    requiredParameters: [{ name: 'patientId', type: 'patientId' }],
+    description: 'Get treatment recommendations for a condition',
+    requiredParameters: [],
     optionalParameters: [
       { name: 'condition', type: 'string' },
+      { name: 'patientId', type: 'patientId' },
       { name: 'urgency', type: 'string', defaultValue: 'routine' }
     ],
     triggers: ['/treatment', '/treat', '/recommend'],
     patterns: [
-      { regex: '^/treat(?:ment)?\\s+(?<patientId>[\\w-]+)(?:\\s+(?<condition>.+))?$', weight: 0.95 },
-      { regex: 'treatment\\s+(?:recommendation|plan)\\s+(?:for\\s+)?(?:patient\\s+)?(?<patientId>[\\w-]+)', weight: 0.85 }
+      // Slash command patterns
+      { regex: '^/treat(?:ment)?\\s+(?<condition>.+)$', weight: 0.95 },
+      // Natural language patterns for conditions
+      { regex: 'treatment\\s+(?:options?|recommendations?|plan)?\\s+(?:for\\s+)?(?<condition>diabetes|hypertension|asthma|copd|heart\\s+failure|depression|anxiety|obesity)', weight: 0.9 },
+      { regex: '(?:what|how)\\s+(?:are|is|to)\\s+(?:the\\s+)?treatment\\s+(?:options?)?\\s+(?:for\\s+)?(?<condition>.+?)(?:\\?|$)', weight: 0.88 },
+      { regex: '(?:how\\s+(?:do|should)\\s+(?:you|we|I)\\s+)?treat\\s+(?<condition>.+?)(?:\\?|$)', weight: 0.85 },
+      { regex: '(?:recommend|recommend(?:ation)?s?\\s+(?:for\\s+)?)?(?<condition>diabetes|hypertension|asthma|copd)\\s+(?:type\\s+\\d)?\\s*treatment', weight: 0.85 },
+      // Patient-specific treatment
+      { regex: 'treatment\\s+(?:recommendation|plan)\\s+(?:for\\s+)?(?:patient\\s+)?(?<patientId>[\\w-]+)', weight: 0.82 }
     ],
-    synonyms: ['treatment plan', 'treatment options'],
+    synonyms: ['treatment plan', 'treatment options', 'how to treat', 'therapy for'],
     recipe: 'treatment-recommendation',
     clinicalSafetyLevel: 'advisory',
-    examples: ['/treatment P001', 'treatment recommendation for patient MRN-456']
+    examples: ['/treatment diabetes type 2', 'what are the treatment options for hypertension', 'how to treat asthma']
+  },
+  {
+    intentId: 'hc:diagnosis',
+    intentFamily: IntentFamily.CLINICAL,
+    domain: 'diagnosis',
+    name: 'Differential Diagnosis',
+    description: 'Generate differential diagnosis list from symptoms with ICD-10 coding',
+    requiredParameters: [{ name: 'symptoms', type: 'string' }],
+    optionalParameters: [
+      { name: 'patientId', type: 'patientId' },
+      { name: 'acuity', type: 'string' }
+    ],
+    triggers: ['/diagnosis', '/diagnose', '/ddx', '/differential'],
+    patterns: [
+      { regex: '^/(?:diagnosis|diagnose|ddx|differential)\\s+(?<symptoms>.+)$', weight: 0.95 },
+      { regex: 'differential\\s+(?:diagnosis|dx)\\s+(?:for\\s+)?(?<symptoms>.+)', weight: 0.85 },
+      { regex: 'what\\s+(?:could|might|can)\\s+cause\\s+(?<symptoms>.+?)(?:\\?|$)', weight: 0.8 },
+      { regex: 'diagnos(?:e|is)\\s+(?:for\\s+)?(?<symptoms>.+?)(?:\\?|$)', weight: 0.8 }
+    ],
+    synonyms: ['differential', 'ddx', 'possible diagnoses', 'diagnostic coding'],
+    recipe: 'diagnosis',
+    clinicalSafetyLevel: 'advisory',
+    examples: ['/diagnosis chest pain', '/ddx shortness of breath and fever', 'what could cause persistent headache']
   },
   {
     intentId: 'hc:care-gaps',
@@ -137,6 +168,29 @@ const FALLBACK_INTENTS = [
     recipe: 'emergency-triage',
     clinicalSafetyLevel: 'action_required',
     examples: ['/triage P001 chest pain', 'triage patient MRN-456']
+  },
+  {
+    intentId: 'hc:drug-check',
+    intentFamily: IntentFamily.CLINICAL,
+    domain: 'medication_safety',
+    name: 'Drug Interaction Check',
+    description: 'Check for drug-drug interactions, contraindications, and medication safety concerns',
+    requiredParameters: [],
+    optionalParameters: [
+      { name: 'patientId', type: 'patientId' },
+      { name: 'medications', type: 'string' }
+    ],
+    triggers: ['/drug-check', '/ddi', '/med-safety', '/medication-check'],
+    patterns: [
+      { regex: '^/(?:drug-check|ddi|med-safety)(?:\\s+(?<medications>.+))?$', weight: 0.95 },
+      { regex: 'drug\\s+(?:drug\\s+)?interaction(?:s)?\\s+(?:for\\s+)?(?:between\\s+)?(?<medications>.+)', weight: 0.85 },
+      { regex: 'check\\s+(?:for\\s+)?(?:drug\\s+)?interactions?\\s+(?:between\\s+)?(?<medications>.+)', weight: 0.85 },
+      { regex: 'medication\\s+safety\\s+(?:check\\s+)?(?:for\\s+)?(?<medications>.+)?', weight: 0.8 }
+    ],
+    synonyms: ['drug interaction', 'medication interaction', 'drug safety', 'DDI check'],
+    recipe: 'drug-check',
+    clinicalSafetyLevel: 'advisory',
+    examples: ['/drug-check metformin lisinopril', 'check drug interactions for warfarin and aspirin', '/ddi aspirin ibuprofen']
   },
   {
     intentId: 'hc:help',

@@ -16,6 +16,7 @@ import { HealthcareAdminAgent } from '../../healthcare/admin/HealthcareAdminAgen
 import { HealthcareUserService } from '../../healthcare/auth/HealthcareUserService.js';
 import { CosmosGremlinClient } from '../../database/CosmosGremlinClient.js';
 import { Logger } from '../../utils/logger.js';
+import { getNaturalLanguageService } from '../../healthcare/nls/index.js';
 
 const router = express.Router();
 const logger = new Logger('HealthcareAPI');
@@ -457,6 +458,267 @@ router.get('/graph/stats', async (req, res) => {
 
   } catch (error) {
     logger.error('Failed to get graph stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================
+// HEALTHCARE NLS (Natural Language Service) ROUTES
+// ============================================================
+
+let nlsService = null;
+
+/**
+ * Initialize NLS service with orchestrator for LLM fallback
+ */
+async function ensureNLSInitialized(orchestrator) {
+  if (!nlsService) {
+    nlsService = getNaturalLanguageService();
+    await nlsService.initialize({
+      orchestrator,
+      cache: orchestrator?.cache
+    });
+    logger.info('Healthcare NLS initialized', {
+      llmFallbackEnabled: !!orchestrator
+    });
+  }
+  return nlsService;
+}
+
+/**
+ * POST /api/healthcare/nls/parse
+ * Parse natural language input to detect intent
+ *
+ * Body: { text: string, context?: { orgId?, userId?, clinicalMode? } }
+ * Returns: IntentParseEnvelope with intent, parameters, confidence
+ */
+router.post('/nls/parse', async (req, res) => {
+  try {
+    const orchestrator = getOrchestrator(req);
+    const nls = await ensureNLSInitialized(orchestrator);
+
+    const { text, context = {} } = req.body;
+
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: 'text is required'
+      });
+    }
+
+    const result = await nls.parseIntent({
+      rawText: text,
+      context: {
+        orgId: context.orgId || req.headers['x-org-id'] || 'default',
+        userId: context.userId || req.headers['x-user-id'],
+        clinicalMode: context.clinicalMode,
+        ...context
+      }
+    });
+
+    res.json({
+      success: true,
+      envelope: result,
+      // Convenience fields
+      intentId: result.payload?.intentId,
+      confidence: result.payload?.parseConfidence,
+      confidenceLevel: result.payload?.trace?.confidenceLevel,
+      confidenceModel: result.payload?.trace?.confidenceModel,
+      penalties: result.payload?.trace?.penalties,
+      boosts: result.payload?.trace?.boosts,
+      canProceed: result.payload?.trace?.canProceed,
+      safetyFlag: result.payload?.trace?.safetyFlag,
+      requiresClarification: result.payload?.requiresClarification,
+      parameters: result.payload?.parameters,
+      parser: result.payload?.trace?.parserUsed,
+      llmInvoked: result.payload?.trace?.llmInvoked
+    });
+
+  } catch (error) {
+    logger.error('NLS parse failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/nls/confirm
+ * Confirm an intent after clarification
+ *
+ * Body: { parseEnvelopeId, confirmedIntentId, confirmedParameters }
+ */
+router.post('/nls/confirm', async (req, res) => {
+  try {
+    const orchestrator = getOrchestrator(req);
+    const nls = await ensureNLSInitialized(orchestrator);
+
+    const { parseEnvelopeId, confirmedIntentId, confirmedParameters = [] } = req.body;
+
+    if (!parseEnvelopeId || !confirmedIntentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'parseEnvelopeId and confirmedIntentId are required'
+      });
+    }
+
+    // Build confirmation envelope
+    const { createUserConfirm } = await import('../../healthcare/nls/contracts/zod/IntentConfirmEnvelope.js');
+    const confirmation = createUserConfirm({
+      parseEnvelopeId,
+      confirmedIntentId,
+      confirmedParameters: confirmedParameters.map(p => ({
+        name: p.name,
+        value: p.value,
+        userModified: p.userModified || false
+      }))
+    });
+
+    const result = await nls.confirmIntent(confirmation);
+
+    res.json({
+      success: result.confirmed,
+      ...result
+    });
+
+  } catch (error) {
+    logger.error('NLS confirm failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/nls/intents
+ * Get available healthcare intents
+ */
+router.get('/nls/intents', async (req, res) => {
+  try {
+    const orchestrator = getOrchestrator(req);
+    const nls = await ensureNLSInitialized(orchestrator);
+
+    const intents = nls.getAvailableIntents();
+
+    res.json({
+      success: true,
+      count: intents.length,
+      intents
+    });
+
+  } catch (error) {
+    logger.error('NLS intents failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/nls/help
+ * Get help text for intents
+ */
+router.get('/nls/help', async (req, res) => {
+  try {
+    const orchestrator = getOrchestrator(req);
+    const nls = await ensureNLSInitialized(orchestrator);
+
+    const intentId = req.query.intent;
+    const help = nls.getHelpText(intentId || null);
+
+    res.json({
+      success: true,
+      help
+    });
+
+  } catch (error) {
+    logger.error('NLS help failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/nls/status
+ * Get NLS service status
+ */
+router.get('/nls/status', async (req, res) => {
+  try {
+    const orchestrator = getOrchestrator(req);
+
+    res.json({
+      success: true,
+      initialized: !!nlsService?.initialized,
+      llmFallbackEnabled: !!(nlsService?.llmParser),
+      cacheEnabled: nlsService?.config?.cacheEnabled,
+      ruleConfidenceThreshold: nlsService?.config?.ruleConfidenceThreshold
+    });
+
+  } catch (error) {
+    logger.error('NLS status failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/healthcare/nls/confidence/model
+ * Get the NLS confidence model information
+ */
+router.get('/nls/confidence/model', async (req, res) => {
+  try {
+    const { getNLSConfidenceModelInfo } = await import('../../healthcare/nls/NLSConfidenceIntegration.js');
+    const modelInfo = getNLSConfidenceModelInfo();
+
+    if (!modelInfo) {
+      return res.status(503).json({
+        success: false,
+        error: 'NLS confidence model not loaded'
+      });
+    }
+
+    res.json({
+      success: true,
+      model: modelInfo
+    });
+
+  } catch (error) {
+    logger.error('NLS confidence model info failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/healthcare/nls/confidence/explain
+ * Explain how confidence would be calculated for a parse context
+ *
+ * Body: { matchType, rawConfidence, queryLength, hasAmbiguity, entityCompleteness, missingRequired }
+ */
+router.post('/nls/confidence/explain', async (req, res) => {
+  try {
+    const { explainNLSConfidence } = await import('../../healthcare/nls/NLSConfidenceIntegration.js');
+    const explanation = explainNLSConfidence(req.body);
+
+    res.json({
+      success: true,
+      explanation
+    });
+
+  } catch (error) {
+    logger.error('NLS confidence explanation failed:', error);
     res.status(500).json({
       success: false,
       error: error.message

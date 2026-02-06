@@ -17,6 +17,9 @@
 
 import { Logger } from '../../utils/logger.js';
 import HEALTHCARE_TOOLS from './tools.js';
+import { calculateClinicalConfidence, initializeClinicalConfidence } from '../confidence/ClinicalConfidenceIntegration.js';
+import { getNaturalLanguageService } from '../nls/index.js';
+import { ClarificationReason } from '../nls/contracts/zod/IntentParseEnvelope.js';
 
 // Import the core recipe execution infrastructure
 let recipeExecutorPromise = null;
@@ -182,6 +185,11 @@ export class HealthcareOrchestrator {
     // Pending risk assessments (for action execution)
     this.riskAssessments = new Map();
 
+    // NaturalLanguageService for Zod-based intent parsing (Phase 10)
+    // Uses three-tier architecture: slash commands → deterministic NLS → LLM fallback
+    this.nlsService = null;
+    this.nlsInitialized = false;
+
     // Clinical knowledge for treatment recommendations
     this.clinicalKnowledge = {
       'diabetes': {
@@ -231,6 +239,52 @@ export class HealthcareOrchestrator {
   }
 
   /**
+   * Initialize NaturalLanguageService for Zod-based intent parsing
+   * Called lazily on first use to avoid circular dependencies
+   */
+  async ensureNLSInitialized() {
+    if (this.nlsInitialized) return this.nlsService;
+
+    try {
+      this.nlsService = getNaturalLanguageService();
+      await this.nlsService.initialize({
+        orchestrator: this,
+        cache: this.cache
+      });
+      this.nlsInitialized = true;
+      this.logger.info('NaturalLanguageService initialized for orchestrator');
+      return this.nlsService;
+    } catch (error) {
+      this.logger.warn('Failed to initialize NLS service:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Parse intent using NaturalLanguageService (Zod envelopes)
+   * Returns IntentParseEnvelope with parseConfidence, decisionConfidence, trace
+   */
+  async parseIntentWithNLS(query, context) {
+    const nls = await this.ensureNLSInitialized();
+    if (!nls) {
+      // Fallback to simple pattern matching if NLS unavailable
+      return null;
+    }
+
+    const parseResult = await nls.parseIntent({
+      rawText: query,
+      context: {
+        orgId: context.orgId || 'healthcare',
+        userId: context.userId,
+        clinicalMode: context.clinicalMode,
+        ...context
+      }
+    });
+
+    return parseResult;
+  }
+
+  /**
    * Handle slash commands - /patient, /treatment, /care-gaps, etc.
    * Uses architecture-based flow: IntentRouter → Policy → Recipe → Correctness → DecisionArtifact
    */
@@ -265,6 +319,12 @@ export class HealthcareOrchestrator {
 
         case '/drug-check':
           return await this.handleDrugCheckCommand(args, context, requestId, startTime);
+
+        case '/diagnosis':
+        case '/diagnose':
+        case '/ddx':
+        case '/differential':
+          return await this.handleDiagnosisCommand(args, context, requestId, startTime);
 
         case '/medications':
           return await this.handleMedicationsCommand(args, context, requestId, startTime);
@@ -638,59 +698,131 @@ export class HealthcareOrchestrator {
       });
     }
 
-    // Query database for patient
+    // Query database for patient - track reasoning steps
     let patient = null;
     let diagnoses = [];
     let medications = [];
     let encounters = [];
+    const reasoning = [];
+    let dataSource = 'none';
 
     if (this.graphService?.initialized) {
       try {
-        // Query patient from graph
-        const patientResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').valueMap().limit(1)`
-        );
-        if (patientResult && patientResult.length > 0) {
-          patient = this.flattenGremlinResult(patientResult[0]);
+        // Query patient from graph - support ID, mrn, patientId, or name search
+        // Use properties() instead of valueMap(true) due to serialization issues
+        const inputParts = patientId.trim().split(/\s+/);
+        let patientQuery;
+        if (inputParts.length >= 2) {
+          // Input looks like "FirstName LastName" - search by name
+          const firstName = inputParts[0];
+          const lastName = inputParts.slice(1).join(' ');
+          patientQuery = `g.V().hasLabel('Patient').or(has('id', '${patientId}'), has('mrn', '${patientId}'), has('patientId', '${patientId}'), and(has('firstName', '${firstName}'), has('lastName', '${lastName}'))).limit(1).properties()`;
+        } else {
+          // Single word - search by ID, mrn, firstName, or lastName
+          patientQuery = `g.V().hasLabel('Patient').or(has('id', '${patientId}'), has('mrn', '${patientId}'), has('patientId', '${patientId}'), has('firstName', '${patientId}'), has('lastName', '${patientId}')).limit(1).properties()`;
         }
+        reasoning.push({
+          step: 'query_patient',
+          thought: `Looking up patient ${patientId} in clinical database`,
+          action: 'gremlin_query',
+          query: patientQuery
+        });
+        const patientResult = await this.graphService.client.query(patientQuery);
+        if (patientResult && patientResult.length > 0) {
+          // Convert properties array to object
+          patient = this.convertPropertiesToObject(patientResult);
+          patient.fromDatabase = true;
+          dataSource = 'graph_database';
+          const patientName = patient.firstName && patient.lastName ? `${patient.firstName} ${patient.lastName}` : patient.name || patientId;
+          reasoning[reasoning.length - 1].observation = `Found patient: ${patientName}`;
 
-        // Get diagnoses
-        const diagResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').out('HAS_DIAGNOSIS').valueMap().limit(10)`
-        );
-        diagnoses = (diagResult || []).map(d => this.flattenGremlinResult(d));
+          // Use the actual database patient ID for subsequent queries
+          const dbPatientId = patient.id || patient.patientId || patient.mrn || patientId;
 
-        // Get medications
-        const medResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').out('PRESCRIBED').valueMap().limit(10)`
-        );
-        medications = (medResult || []).map(m => this.flattenGremlinResult(m));
+          // Get ALL diagnoses (no limit - show full history)
+          const diagQuery = `g.V().hasLabel('Patient').has('id', '${dbPatientId}').out('HAS_DIAGNOSIS').properties()`;
+          reasoning.push({
+            step: 'query_diagnoses',
+            thought: 'Retrieving ALL patient diagnoses (full history)',
+            action: 'gremlin_query',
+            query: diagQuery
+          });
+          const diagResult = await this.graphService.client.query(diagQuery);
+          diagnoses = this.convertPropertiesToObjects(diagResult || []);
+          reasoning[reasoning.length - 1].observation = `Found ${diagnoses.length} diagnoses in patient history`;
 
-        // Get recent encounters
-        const encResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').out('HAS_ENCOUNTER').order().by('admitDate', decr).valueMap().limit(5)`
-        );
-        encounters = (encResult || []).map(e => this.flattenGremlinResult(e));
+          // Get ALL medications (no limit - show full history) - use TAKES_MEDICATION for secondary, PRESCRIBED for primary
+          const medQuery = `g.V().hasLabel('Patient').has('id', '${dbPatientId}').out('TAKES_MEDICATION', 'PRESCRIBED').properties()`;
+          reasoning.push({
+            step: 'query_medications',
+            thought: 'Retrieving ALL patient medications (full history)',
+            action: 'gremlin_query',
+            query: medQuery
+          });
+          const medResult = await this.graphService.client.query(medQuery);
+          medications = this.convertPropertiesToObjects(medResult || []);
+          reasoning[reasoning.length - 1].observation = `Found ${medications.length} medications in patient history`;
+
+          // Get ALL encounters (no limit - show full history)
+          const encQuery = `g.V().hasLabel('Patient').has('id', '${dbPatientId}').out('HAS_ENCOUNTER').properties()`;
+          reasoning.push({
+            step: 'query_encounters',
+            thought: 'Retrieving ALL patient encounters (full history)',
+            action: 'gremlin_query',
+            query: encQuery
+          });
+          const encResult = await this.graphService.client.query(encQuery);
+          encounters = this.convertPropertiesToObjects(encResult || []);
+          reasoning[reasoning.length - 1].observation = `Found ${encounters.length} encounters in patient history`;
+        } else {
+          reasoning[reasoning.length - 1].observation = `Patient ${patientId} not found in database`;
+        }
 
       } catch (dbError) {
         this.logger.error('Database query error:', dbError);
+        reasoning.push({
+          step: 'database_error',
+          thought: 'Database query failed',
+          action: 'error',
+          observation: dbError.message
+        });
       }
+    } else {
+      reasoning.push({
+        step: 'no_database',
+        thought: 'Graph database not initialized',
+        action: 'error',
+        observation: 'Database connection required for patient lookup'
+      });
     }
 
-    // If no DB result, use synthetic demo data
+    // No synthetic fallback - require real data from database
     if (!patient) {
-      patient = this.getSyntheticPatient(patientId);
-      diagnoses = this.getSyntheticDiagnoses(patientId);
-      medications = this.getSyntheticMedications(patientId);
-      encounters = this.getSyntheticEncounters(patientId);
-    }
-
-    if (!patient) {
+      // Try to suggest available patients
+      let suggestion = '';
+      if (this.graphService?.initialized) {
+        try {
+          const sampleQuery = `g.V().hasLabel('Patient').limit(5).valueMap('firstName', 'lastName', 'mrn')`;
+          const sampleResult = await this.graphService.client.query(sampleQuery);
+          if (sampleResult && sampleResult.length > 0) {
+            const names = sampleResult.map(p => {
+              const fn = Array.isArray(p.firstName) ? p.firstName[0] : p.firstName;
+              const ln = Array.isArray(p.lastName) ? p.lastName[0] : p.lastName;
+              const mrn = Array.isArray(p.mrn) ? p.mrn[0] : p.mrn;
+              return `${fn || ''} ${ln || ''}${mrn ? ` (${mrn})` : ''}`.trim();
+            }).filter(n => n);
+            if (names.length > 0) {
+              suggestion = ` Available patients: ${names.join(', ')}`;
+            }
+          }
+        } catch (e) { /* ignore suggestion errors */ }
+      }
       return this.buildResponse({
         requestId,
         success: false,
         type: 'not_found',
-        summary: `Patient ${patientId} not found`,
+        summary: `Patient "${patientId}" not found in database. Try searching by full name (e.g., "John Smith") or MRN.${suggestion}`,
+        reasoning,
         duration: Date.now() - startTime
       });
     }
@@ -700,11 +832,10 @@ export class HealthcareOrchestrator {
     const alerts = this.generatePatientAlerts(patient, diagnoses, medications);
 
     // Track data source for confidence calculation
-    const usingSyntheticData = !this.graphService?.initialized || !patient?.fromDatabase;
+    const usingSyntheticData = dataSource === 'synthetic_demo';
 
     // Call LLM to generate comprehensive summary
     let llmSummary = null;
-    let reasoning = [];
     let llmSuccess = false;
 
     if (this.llmService) {
@@ -743,10 +874,13 @@ Format as a cohesive narrative paragraph suitable for clinical handoff. Be speci
 
         llmSummary = llmResponse?.text || llmResponse;
         llmSuccess = true;
-        reasoning = [
-          { step: 'data_collection', thought: 'Retrieved patient demographics, diagnoses, and medications', action: 'query_database', observation: `Found ${diagnoses.length} diagnoses, ${medications.length} medications` },
-          { step: 'clinical_analysis', thought: 'Analyzing patient data for clinical summary', action: 'llm_summarize', observation: 'Generated comprehensive clinical summary' }
-        ];
+        // Add LLM reasoning steps to existing query steps (don't overwrite!)
+        reasoning.push({
+          step: 'llm_summarization',
+          thought: 'Generating comprehensive clinical summary using LLM',
+          action: 'llm_summarize',
+          observation: 'Generated comprehensive clinical summary from patient data'
+        });
       } catch (llmError) {
         this.logger.warn('LLM summary generation failed:', llmError.message);
         llmSuccess = false;
@@ -765,26 +899,52 @@ Format as a cohesive narrative paragraph suitable for clinical handoff. Be speci
       findings.push({ severity: a.severity || 'warning', message: a.message });
     });
 
-    // Calculate confidence using multi-factor algorithm
+    // Calculate confidence using CENTRAL CONTROL PLANE (ClinicalConfidenceIntegration)
     const expectedFields = ['name', 'dateOfBirth', 'gender'];
     const presentFields = expectedFields.filter(f => patient[f] || patient[f.toLowerCase()]);
     const dataCompleteness = (presentFields.length / expectedFields.length) * 0.5 +
       (diagnoses.length > 0 ? 0.25 : 0) + (medications.length > 0 ? 0.25 : 0);
 
-    const confidence = calculateConfidence({
-      dataCompleteness,
-      dataQuality: 0.7, // Assume moderate quality without date validation
-      sourceReliability: usingSyntheticData ? 0.4 : 0.8,
-      modelCertainty: llmSuccess ? 0.9 : 0.5,
-      evidenceLevel: 0.7,
-      penalties: [
-        ...(usingSyntheticData ? [{ type: 'synthetic_data' }] : []),
-        ...(!llmSuccess ? [{ type: 'llm_fallback' }] : []),
-        ...(diagnoses.length === 0 ? [{ type: 'missing_critical_data' }] : [])
-      ],
-      boosts: [
-        ...(diagnoses.length > 0 && medications.length > 0 ? [{ type: 'multiple_sources' }] : [])
-      ]
+    // Use control plane confidence - model selected by intent, NOT by LLM usage
+    // Real database data = high reliability, synthetic = low
+    const isRealData = !usingSyntheticData;
+    const confidenceResult = calculateClinicalConfidence(
+      {
+        intentId: 'patient-summary',
+        intentMode: 'CLINICAL_DECISION_SUPPORT',
+        recipeId: 'patient-summary-v1'
+      },
+      {
+        dataCompleteness,
+        dataQuality: isRealData ? 0.9 : 0.5,           // Real DB data = high quality
+        sourceReliability: isRealData ? 0.95 : 0.4,    // Real clinical data = very reliable
+        modelCertainty: isRealData ? 0.85 : 0.5,       // Deterministic DB lookup = reliable
+        evidenceLevel: isRealData ? 0.8 : 0.5,         // Clinical records = good evidence
+        llmUsed: llmSuccess,
+        llmFailed: !llmSuccess && this.llmService,
+        syntheticData: usingSyntheticData,
+        missingCritical: diagnoses.length === 0,
+        multipleSources: diagnoses.length > 0 && medications.length > 0,
+        recentlyValidated: isRealData,                 // DB data is current
+        expertReviewed: false                          // Not reviewed by expert
+      }
+    );
+    const confidence = confidenceResult.value;
+
+    // Add confidence calculation to reasoning
+    reasoning.push({
+      step: 'confidence_calculation',
+      thought: 'Computing clinical confidence using control plane',
+      action: 'calculate_clinical_confidence',
+      model: confidenceResult.modelId,
+      modelVersion: confidenceResult.modelVersion,
+      observation: `Confidence: ${Math.round(confidence * 100)}% (${confidenceResult.level}), canProceed: ${confidenceResult.canProceed}`,
+      factors: {
+        dataSource: isRealData ? 'graph_database' : 'synthetic_demo',
+        dataCompleteness: Math.round(dataCompleteness * 100) + '%',
+        diagnoses: diagnoses.length,
+        medications: medications.length
+      }
     });
 
     return this.buildResponse({
@@ -793,13 +953,21 @@ Format as a cohesive narrative paragraph suitable for clinical handoff. Be speci
       type: 'patient_summary',
       summary: llmSummary || `Patient: ${patientName} (${patientId})`,
       confidence,
+      confidenceLevel: confidenceResult.level,
+      confidenceModel: confidenceResult.modelId,
+      confidenceModelVersion: confidenceResult.modelVersion,
+      canProceed: confidenceResult.canProceed,
+      safetyFlag: confidenceResult.safetyFlag,
       confidenceFactors: {
+        ...confidenceResult.factors,
         dataCompleteness: Math.round(dataCompleteness * 100) + '%',
         sourceType: usingSyntheticData ? 'synthetic_demo' : 'database',
         llmGenerated: llmSuccess,
         diagnosesFound: diagnoses.length,
         medicationsFound: medications.length
       },
+      confidencePenalties: confidenceResult.penalties,
+      confidenceBoosts: confidenceResult.boosts,
       reasoning,
       data: {
         patient: {
@@ -867,9 +1035,17 @@ Format as a cohesive narrative paragraph suitable for clinical handoff. Be speci
     // Call LLM for comprehensive treatment recommendations
     let llmSummary = null;
     let llmRecommendations = [];
-    let reasoning = [];
+    const reasoning = [];
     let llmSuccess = false;
     const hasGuidelineMatch = !!treatment;
+
+    // Add guideline lookup step
+    reasoning.push({
+      step: 'guideline_lookup',
+      thought: `Looking up evidence-based guidelines for ${condition}`,
+      action: 'query_clinical_knowledge',
+      observation: hasGuidelineMatch ? `Found guideline match: ${matchedCondition}` : 'No specific guideline found'
+    });
 
     if (this.llmService) {
       try {
@@ -894,6 +1070,13 @@ For each recommendation, provide:
 
 Format as a clinical decision support response.`;
 
+        reasoning.push({
+          step: 'llm_analysis',
+          thought: 'Generating comprehensive treatment plan using LLM',
+          action: 'llm_analyze',
+          query: `Treatment recommendations for ${condition}`
+        });
+
         const llmResponse = await this.llmService.generateText(prompt, {
           maxTokens: 2000,
           temperature: 0.3
@@ -901,13 +1084,11 @@ Format as a clinical decision support response.`;
 
         llmSummary = llmResponse?.text || llmResponse;
         llmSuccess = true;
-        reasoning = [
-          { step: 'condition_analysis', thought: `Analyzing treatment options for ${condition}`, action: 'query_guidelines', observation: 'Retrieved evidence-based protocols' },
-          { step: 'recommendation_generation', thought: 'Generating comprehensive treatment plan', action: 'llm_analyze', observation: 'Generated multi-faceted treatment recommendations' }
-        ];
+        reasoning[reasoning.length - 1].observation = 'Generated multi-faceted treatment recommendations';
       } catch (llmError) {
         this.logger.warn('LLM treatment generation failed:', llmError.message);
         llmSuccess = false;
+        reasoning[reasoning.length - 1].observation = `LLM failed: ${llmError.message}`;
       }
     }
 
@@ -920,20 +1101,35 @@ Format as a clinical decision support response.`;
       source: 'Clinical judgment'
     };
 
-    // Calculate confidence using multi-factor algorithm
-    const confidence = calculateConfidence({
-      dataCompleteness: hasGuidelineMatch ? 0.9 : 0.5,
-      dataQuality: 0.8,
-      sourceReliability: hasGuidelineMatch ? 0.95 : 0.6, // Clinical guidelines = high reliability
-      modelCertainty: llmSuccess ? 0.9 : 0.5,
-      evidenceLevel: baseData.source?.includes('ADA') || baseData.source?.includes('ACC') ? 0.95 : 0.7,
-      penalties: [
-        ...(!hasGuidelineMatch ? [{ type: 'missing_critical_data' }] : []),
-        ...(!llmSuccess ? [{ type: 'llm_fallback' }] : [])
-      ],
-      boosts: [
-        ...(hasGuidelineMatch && llmSuccess ? [{ type: 'multiple_sources' }] : [])
-      ]
+    // Calculate confidence using CONTROL PLANE (ClinicalConfidenceIntegration)
+    const confidenceResult = calculateClinicalConfidence(
+      {
+        intentId: 'treatment-recommendation',
+        intentMode: 'CLINICAL_DECISION_SUPPORT',
+        recipeId: 'treatment-v1'
+      },
+      {
+        dataCompleteness: hasGuidelineMatch ? 0.9 : 0.5,
+        dataQuality: 0.8,
+        sourceReliability: hasGuidelineMatch ? 0.95 : 0.6,
+        modelCertainty: llmSuccess ? 0.9 : 0.5,
+        evidenceLevel: baseData.source?.includes('ADA') || baseData.source?.includes('ACC') ? 0.95 : 0.7,
+        llmUsed: llmSuccess,
+        llmFailed: !llmSuccess && this.llmService,
+        missingCritical: !hasGuidelineMatch,
+        multipleSources: hasGuidelineMatch && llmSuccess
+      }
+    );
+    const confidence = confidenceResult.value;
+
+    // Add confidence calculation to reasoning
+    reasoning.push({
+      step: 'confidence_calculation',
+      thought: 'Computing clinical confidence using control plane',
+      action: 'calculate_clinical_confidence',
+      model: confidenceResult.modelId,
+      modelVersion: confidenceResult.modelVersion,
+      observation: `Confidence: ${Math.round(confidence * 100)}% (${confidenceResult.level})`
     });
 
     return this.buildResponse({
@@ -942,12 +1138,20 @@ Format as a clinical decision support response.`;
       type: 'treatment_recommendation',
       summary: llmSummary || `Treatment protocol for ${matchedCondition || condition}`,
       confidence,
+      confidenceLevel: confidenceResult.level,
+      confidenceModel: confidenceResult.modelId,
+      confidenceModelVersion: confidenceResult.modelVersion,
+      canProceed: confidenceResult.canProceed,
+      safetyFlag: confidenceResult.safetyFlag,
       confidenceFactors: {
+        ...confidenceResult.factors,
         guidelineMatch: hasGuidelineMatch,
         source: baseData.source,
         llmGenerated: llmSuccess,
         evidenceLevel: baseData.source?.includes('ADA') ? 'A (RCT)' : 'C (Expert)'
       },
+      confidencePenalties: confidenceResult.penalties,
+      confidenceBoosts: confidenceResult.boosts,
       reasoning,
       data: {
         condition: matchedCondition || condition,
@@ -965,6 +1169,215 @@ Format as a clinical decision support response.`;
         ...(baseData.monitoring || []).map(m => ({ action: m, priority: 'recommended' }))
       ],
       compliance_status: { source: baseData.source, evidenceLevel: 'A' },
+      duration: Date.now() - startTime
+    });
+  }
+
+  /**
+   * /diagnosis <symptoms> - Differential diagnosis with ICD-10 coding
+   */
+  async handleDiagnosisCommand(symptoms, context, requestId, startTime) {
+    if (!symptoms || symptoms.trim().length === 0) {
+      return this.buildResponse({
+        requestId,
+        success: false,
+        type: 'error',
+        summary: 'Symptoms required. Usage: /diagnosis chest pain',
+        duration: Date.now() - startTime
+      });
+    }
+
+    const reasoning = [];
+
+    // Step 1: Check knowledge base for known symptom-to-diagnosis mappings
+    reasoning.push({
+      step: 'symptom_analysis',
+      thought: `Analyzing presenting symptoms: ${symptoms}`,
+      action: 'parse_symptoms',
+      observation: `Parsed symptom input: "${symptoms}"`
+    });
+
+    // Known differential diagnosis mappings (clinical reference data)
+    const differentialDb = {
+      'chest pain': [
+        { diagnosis: 'Acute coronary syndrome', icd10: 'I24.9', probability: 'high', severity: 'critical', redFlags: ['radiation to arm/jaw', 'diaphoresis', 'dyspnea'], workup: ['ECG', 'Troponin serial', 'CXR'] },
+        { diagnosis: 'Pulmonary embolism', icd10: 'I26.99', probability: 'medium', severity: 'critical', redFlags: ['pleuritic pain', 'tachycardia', 'recent immobility'], workup: ['D-dimer', 'CT-PA', 'Wells score'] },
+        { diagnosis: 'Pneumothorax', icd10: 'J93.9', probability: 'medium', severity: 'high', redFlags: ['sudden onset', 'decreased breath sounds'], workup: ['CXR', 'CT chest'] },
+        { diagnosis: 'Gastroesophageal reflux', icd10: 'K21.0', probability: 'medium', severity: 'low', redFlags: [], workup: ['PPI trial', 'Upper endoscopy if refractory'] },
+        { diagnosis: 'Costochondritis', icd10: 'M94.0', probability: 'medium', severity: 'low', redFlags: [], workup: ['Physical exam', 'NSAIDs trial'] },
+        { diagnosis: 'Aortic dissection', icd10: 'I71.01', probability: 'low', severity: 'critical', redFlags: ['tearing pain', 'BP differential', 'widened mediastinum'], workup: ['CT-A aorta', 'D-dimer', 'Bedside echo'] }
+      ],
+      'headache': [
+        { diagnosis: 'Tension-type headache', icd10: 'G44.209', probability: 'high', severity: 'low', redFlags: [], workup: ['Clinical diagnosis', 'Headache diary'] },
+        { diagnosis: 'Migraine without aura', icd10: 'G43.009', probability: 'high', severity: 'medium', redFlags: ['new onset after 50', 'thunderclap'], workup: ['Clinical diagnosis', 'CT/MRI if red flags'] },
+        { diagnosis: 'Subarachnoid hemorrhage', icd10: 'I60.9', probability: 'low', severity: 'critical', redFlags: ['thunderclap onset', 'worst headache of life', 'meningismus'], workup: ['Non-contrast CT head', 'LP if CT negative'] },
+        { diagnosis: 'Meningitis', icd10: 'G03.9', probability: 'low', severity: 'critical', redFlags: ['fever', 'neck stiffness', 'altered mental status'], workup: ['LP with CSF analysis', 'Blood cultures', 'CT before LP if indicated'] },
+        { diagnosis: 'Temporal arteritis', icd10: 'M31.6', probability: 'low', severity: 'high', redFlags: ['age >50', 'jaw claudication', 'visual changes'], workup: ['ESR', 'CRP', 'Temporal artery biopsy'] }
+      ],
+      'shortness of breath': [
+        { diagnosis: 'Acute exacerbation of COPD', icd10: 'J44.1', probability: 'high', severity: 'high', redFlags: ['wheezing', 'productive cough', 'smoking history'], workup: ['CXR', 'ABG', 'Spirometry'] },
+        { diagnosis: 'Heart failure exacerbation', icd10: 'I50.9', probability: 'high', severity: 'high', redFlags: ['orthopnea', 'PND', 'peripheral edema'], workup: ['BNP', 'CXR', 'Echocardiogram'] },
+        { diagnosis: 'Pneumonia', icd10: 'J18.9', probability: 'medium', severity: 'high', redFlags: ['fever', 'productive cough', 'crackles'], workup: ['CXR', 'CBC', 'Procalcitonin', 'Blood/sputum cultures'] },
+        { diagnosis: 'Asthma exacerbation', icd10: 'J45.901', probability: 'medium', severity: 'medium', redFlags: ['wheezing', 'nighttime symptoms'], workup: ['Peak flow', 'Spirometry', 'CXR'] },
+        { diagnosis: 'Pulmonary embolism', icd10: 'I26.99', probability: 'medium', severity: 'critical', redFlags: ['pleuritic pain', 'tachycardia', 'unilateral leg swelling'], workup: ['D-dimer', 'CT-PA', 'Wells score'] }
+      ],
+      'abdominal pain': [
+        { diagnosis: 'Appendicitis', icd10: 'K35.80', probability: 'high', severity: 'high', redFlags: ['RLQ pain', 'rebound', 'migration from periumbilical'], workup: ['CT abdomen/pelvis', 'CBC', 'CRP'] },
+        { diagnosis: 'Cholecystitis', icd10: 'K81.0', probability: 'medium', severity: 'high', redFlags: ['RUQ pain', 'Murphy sign', 'post-prandial'], workup: ['RUQ ultrasound', 'CBC', 'LFTs', 'Lipase'] },
+        { diagnosis: 'Peptic ulcer disease', icd10: 'K27.9', probability: 'medium', severity: 'medium', redFlags: ['epigastric pain', 'NSAID use', 'H. pylori'], workup: ['H. pylori test', 'Upper endoscopy'] },
+        { diagnosis: 'Small bowel obstruction', icd10: 'K56.609', probability: 'medium', severity: 'high', redFlags: ['vomiting', 'obstipation', 'prior surgery'], workup: ['CT abdomen', 'Abdominal XR', 'CBC', 'BMP'] },
+        { diagnosis: 'Pancreatitis', icd10: 'K85.9', probability: 'medium', severity: 'high', redFlags: ['epigastric radiating to back', 'alcohol use', 'gallstones'], workup: ['Lipase', 'CT abdomen', 'RUQ US'] }
+      ],
+      'fever': [
+        { diagnosis: 'Upper respiratory infection', icd10: 'J06.9', probability: 'high', severity: 'low', redFlags: [], workup: ['Clinical diagnosis', 'Rapid strep/flu if indicated'] },
+        { diagnosis: 'Urinary tract infection', icd10: 'N39.0', probability: 'medium', severity: 'low', redFlags: ['dysuria', 'frequency', 'flank pain'], workup: ['Urinalysis', 'Urine culture'] },
+        { diagnosis: 'Pneumonia', icd10: 'J18.9', probability: 'medium', severity: 'high', redFlags: ['cough', 'dyspnea', 'crackles'], workup: ['CXR', 'CBC', 'Blood cultures'] },
+        { diagnosis: 'Sepsis', icd10: 'A41.9', probability: 'low', severity: 'critical', redFlags: ['tachycardia', 'hypotension', 'altered mental status'], workup: ['Blood cultures x2', 'Lactate', 'CBC', 'Procalcitonin'] }
+      ]
+    };
+
+    // Match symptoms to differential
+    const symptomsLower = symptoms.toLowerCase().trim();
+    let differentials = null;
+    let matchedSymptom = null;
+
+    for (const [symptom, ddx] of Object.entries(differentialDb)) {
+      if (symptomsLower.includes(symptom)) {
+        differentials = ddx;
+        matchedSymptom = symptom;
+        break;
+      }
+    }
+
+    reasoning.push({
+      step: 'differential_lookup',
+      thought: `Searching clinical differential database for "${symptoms}"`,
+      action: 'query_differential_db',
+      observation: matchedSymptom
+        ? `Found ${differentials.length} differential diagnoses for "${matchedSymptom}"`
+        : 'No exact match in differential database'
+    });
+
+    // Step 2: Use LLM for comprehensive differential if available
+    let llmDifferentials = null;
+    let llmSuccess = false;
+
+    if (this.llmService) {
+      try {
+        const prompt = `You are a clinical decision support system. Generate a differential diagnosis list for the following presenting symptoms: ${symptoms}
+
+For each diagnosis, provide:
+1. Diagnosis name
+2. ICD-10 code
+3. Probability (high/medium/low)
+4. Severity (critical/high/medium/low)
+5. Key red flags to look for
+6. Recommended initial workup
+
+List diagnoses in order of clinical importance (life-threatening first, then by probability).
+Limit to the top 6-8 most relevant diagnoses.
+Format each diagnosis as a separate item.`;
+
+        reasoning.push({
+          step: 'llm_differential',
+          thought: 'Generating comprehensive differential using LLM clinical reasoning',
+          action: 'llm_analyze',
+          query: `Differential diagnosis for: ${symptoms}`
+        });
+
+        const llmResponse = await this.llmService.generateText(prompt, {
+          maxTokens: 2000,
+          temperature: 0.3
+        });
+
+        llmDifferentials = llmResponse?.text || llmResponse;
+        llmSuccess = true;
+        reasoning[reasoning.length - 1].observation = 'Generated LLM-augmented differential diagnosis list';
+      } catch (llmError) {
+        this.logger.warn('LLM differential generation failed:', llmError.message);
+        reasoning.push({
+          step: 'llm_fallback',
+          thought: 'LLM unavailable, using reference database only',
+          action: 'fallback',
+          observation: llmError.message
+        });
+      }
+    }
+
+    // Build differential list from database (primary) or generate basic one
+    if (!differentials) {
+      differentials = [
+        { diagnosis: `Unspecified condition related to: ${symptoms}`, icd10: 'R69', probability: 'unknown', severity: 'unknown', redFlags: ['Requires clinical evaluation'], workup: ['Complete history and physical', 'Basic labs (CBC, BMP, CRP)'] }
+      ];
+    }
+
+    // Calculate confidence
+    const confidenceResult = calculateClinicalConfidence(
+      {
+        intentId: 'diagnosis',
+        intentMode: 'CLINICAL_DECISION_SUPPORT',
+        recipeId: 'diagnosis-v1'
+      },
+      {
+        dataCompleteness: matchedSymptom ? 0.85 : 0.4,
+        dataQuality: 0.8,
+        sourceReliability: matchedSymptom ? 0.9 : 0.5,
+        modelCertainty: llmSuccess ? 0.85 : (matchedSymptom ? 0.7 : 0.3),
+        evidenceLevel: matchedSymptom ? 0.85 : 0.5,
+        llmUsed: llmSuccess,
+        llmFailed: !llmSuccess && !!this.llmService,
+        missingCritical: !matchedSymptom && !llmSuccess,
+        multipleSources: matchedSymptom && llmSuccess
+      }
+    );
+    const confidence = confidenceResult.value;
+
+    reasoning.push({
+      step: 'confidence_calculation',
+      thought: 'Computing clinical confidence using control plane',
+      action: 'calculate_clinical_confidence',
+      model: confidenceResult.modelId,
+      modelVersion: confidenceResult.modelVersion,
+      observation: `Confidence: ${Math.round(confidence * 100)}% (${confidenceResult.level}), canProceed: ${confidenceResult.canProceed}`
+    });
+
+    return this.buildResponse({
+      requestId,
+      success: true,
+      type: 'differential_diagnosis',
+      summary: `Differential diagnosis for: ${symptoms}`,
+      confidence,
+      confidenceLevel: confidenceResult.level,
+      confidenceModel: confidenceResult.modelId,
+      confidenceModelVersion: confidenceResult.modelVersion,
+      canProceed: confidenceResult.canProceed,
+      safetyFlag: confidenceResult.safetyFlag,
+      confidenceFactors: confidenceResult.factors,
+      confidenceBoosts: confidenceResult.boosts,
+      reasoning,
+      data: {
+        summary: `Differential diagnosis for: ${symptoms}`,
+        symptoms: symptoms,
+        matchedCategory: matchedSymptom,
+        differentials,
+        llmAnalysis: llmDifferentials,
+        confidence,
+        confidenceLevel: confidenceResult.level,
+        canProceed: confidenceResult.canProceed
+      },
+      findings: differentials.map(d => ({
+        type: 'differential',
+        severity: d.severity === 'critical' ? 'critical' : d.severity === 'high' ? 'high' : 'medium',
+        message: `${d.diagnosis} (${d.icd10}) - ${d.probability} probability`,
+        evidence: d.redFlags?.length > 0 ? `Red flags: ${d.redFlags.join(', ')}` : null
+      })),
+      recommended_actions: [
+        { action: 'Complete history and physical examination', priority: 'required' },
+        ...differentials.filter(d => d.severity === 'critical').map(d => ({
+          action: `Rule out ${d.diagnosis}: ${d.workup?.join(', ') || 'Clinical evaluation'}`,
+          priority: 'urgent'
+        }))
+      ],
       duration: Date.now() - startTime
     });
   }
@@ -1082,40 +1495,86 @@ Format as a clinical decision support response.`;
       });
     }
 
-    // Get patient data first
+    // Get patient data first - track reasoning steps
     let patient = null;
     let diagnoses = [];
     let procedures = [];
+    const reasoning = [];
+    let dataSource = 'none';
 
     if (this.graphService?.initialized) {
       try {
-        const patientResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').valueMap().limit(1)`
-        );
+        // Query patient - support ID, mrn, patientId, or name search
+        const inputParts = patientId.trim().split(/\s+/);
+        let patientQuery;
+        if (inputParts.length >= 2) {
+          // Input looks like "FirstName LastName" - search by name
+          const firstName = inputParts[0];
+          const lastName = inputParts.slice(1).join(' ');
+          patientQuery = `g.V().hasLabel('Patient').or(has('id', '${patientId}'), has('mrn', '${patientId}'), has('patientId', '${patientId}'), and(has('firstName', '${firstName}'), has('lastName', '${lastName}'))).valueMap(true).limit(1)`;
+        } else if (/^[a-zA-Z]+$/.test(patientId)) {
+          // Single word - could be firstName or lastName
+          patientQuery = `g.V().hasLabel('Patient').or(has('id', '${patientId}'), has('mrn', '${patientId}'), has('patientId', '${patientId}'), has('firstName', '${patientId}'), has('lastName', '${patientId}')).valueMap(true).limit(1)`;
+        } else {
+          // Standard ID lookup
+          patientQuery = `g.V().hasLabel('Patient').or(has('id', '${patientId}'), has('mrn', '${patientId}'), has('patientId', '${patientId}')).valueMap(true).limit(1)`;
+        }
+        reasoning.push({
+          step: 'query_patient',
+          thought: `Looking up patient ${patientId} for care gap analysis`,
+          action: 'gremlin_query',
+          query: patientQuery
+        });
+        const patientResult = await this.graphService.client.query(patientQuery);
         if (patientResult && patientResult.length > 0) {
           patient = this.flattenGremlinResult(patientResult[0]);
+          patient.fromDatabase = true;  // Mark as real data
+          dataSource = 'graph_database';
+          const patientName = patient.firstName && patient.lastName ? `${patient.firstName} ${patient.lastName}` : patient.name || patientId;
+          reasoning[reasoning.length - 1].observation = `Found patient: ${patientName}`;
+
+          // Use the actual database patient ID for subsequent queries
+          const dbPatientId = patient.id || patient.patientId || patient.mrn || patientId;
+
+          // Query diagnoses
+          const diagQuery = `g.V().hasLabel('Patient').has('id', '${dbPatientId}').out('HAS_DIAGNOSIS').valueMap(true)`;
+          reasoning.push({
+            step: 'query_diagnoses',
+            thought: 'Retrieving patient diagnoses for care gap analysis',
+            action: 'gremlin_query',
+            query: diagQuery
+          });
+          const diagResult = await this.graphService.client.query(diagQuery);
+          diagnoses = (diagResult || []).map(d => this.flattenGremlinResult(d));
+          reasoning[reasoning.length - 1].observation = `Found ${diagnoses.length} diagnoses`;
+
+          // Query procedures - support both HAD_PROCEDURE (secondary) and UNDERWENT (primary)
+          const procQuery = `g.V().hasLabel('Patient').has('id', '${dbPatientId}').out('HAD_PROCEDURE', 'UNDERWENT').valueMap(true)`;
+          reasoning.push({
+            step: 'query_procedures',
+            thought: 'Retrieving patient procedures to check gap closure',
+            action: 'gremlin_query',
+            query: procQuery
+          });
+          const procResult = await this.graphService.client.query(procQuery);
+          procedures = (procResult || []).map(p => this.flattenGremlinResult(p));
+          reasoning[reasoning.length - 1].observation = `Found ${procedures.length} procedures`;
+        } else {
+          reasoning[reasoning.length - 1].observation = `Patient ${patientId} not found in database`;
         }
-
-        const diagResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').out('HAS_DIAGNOSIS').valueMap()`
-        );
-        diagnoses = (diagResult || []).map(d => this.flattenGremlinResult(d));
-
-        const procResult = await this.graphService.client.query(
-          `g.V().hasLabel('Patient').has('patientId', '${patientId}').out('UNDERWENT').valueMap()`
-        );
-        procedures = (procResult || []).map(p => this.flattenGremlinResult(p));
 
       } catch (dbError) {
         this.logger.error('Database query error:', dbError);
+        reasoning.push({
+          step: 'database_error',
+          thought: 'Database query failed',
+          action: 'error',
+          observation: dbError.message
+        });
       }
     }
 
-    // Fallback to synthetic data
-    if (!patient) {
-      patient = this.getSyntheticPatient(patientId);
-      diagnoses = this.getSyntheticDiagnoses(patientId);
-    }
+    // No synthetic fallback - require real data from database
 
     if (!patient) {
       return this.buildResponse({
@@ -1127,18 +1586,24 @@ Format as a clinical decision support response.`;
       });
     }
 
-    const patientName = `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unknown';
+    const patientName = patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unknown';
     const age = this.calculateAge(patient.dateOfBirth || patient.dob);
 
     // Track data source for confidence calculation
-    const usingSyntheticData = !this.graphService?.initialized || !patient?.fromDatabase;
+    const usingSyntheticData = dataSource === 'synthetic_demo';
+    const isRealData = !usingSyntheticData;
 
     // Analyze care gaps from data
+    reasoning.push({
+      step: 'gap_analysis',
+      thought: 'Analyzing HEDIS quality measures and identifying care gaps',
+      action: 'analyze_hedis'
+    });
     const careGaps = this.analyzeCareGaps(patient, diagnoses, procedures);
+    reasoning[reasoning.length - 1].observation = `Identified ${careGaps.length} care gaps`;
 
     // Call LLM for comprehensive care gap analysis
     let llmSummary = null;
-    let reasoning = [];
     let llmSuccess = false;
 
     if (this.llmService) {
@@ -1165,6 +1630,13 @@ Provide a comprehensive care gap analysis including:
 
 Focus on actionable recommendations that improve quality metrics and patient outcomes.`;
 
+        reasoning.push({
+          step: 'llm_analysis',
+          thought: 'Generating comprehensive care gap recommendations using LLM',
+          action: 'llm_analyze',
+          query: `Care gap analysis for ${patientId}`
+        });
+
         const llmResponse = await this.llmService.generateText(prompt, {
           maxTokens: 2000,
           temperature: 0.3
@@ -1172,29 +1644,47 @@ Focus on actionable recommendations that improve quality metrics and patient out
 
         llmSummary = llmResponse?.text || llmResponse;
         llmSuccess = true;
-        reasoning = [
-          { step: 'gap_identification', thought: 'Identifying overdue screenings and preventive services', action: 'analyze_hedis', observation: `Found ${careGaps.length} care gaps` },
-          { step: 'clinical_analysis', thought: 'Analyzing clinical significance and prioritization', action: 'llm_analyze', observation: 'Generated comprehensive care gap recommendations' }
-        ];
+        reasoning[reasoning.length - 1].observation = 'Generated comprehensive care gap recommendations';
       } catch (llmError) {
         this.logger.warn('LLM care gap analysis failed:', llmError.message);
         llmSuccess = false;
+        reasoning[reasoning.length - 1].observation = `LLM failed: ${llmError.message}`;
       }
     }
 
-    // Calculate confidence using multi-factor algorithm
-    const confidence = calculateConfidence({
-      dataCompleteness: diagnoses.length > 0 ? 0.8 : 0.5,
-      dataQuality: 0.7,
-      sourceReliability: 0.85, // HEDIS measures are well-defined
-      modelCertainty: llmSuccess ? 0.85 : 0.5,
-      evidenceLevel: 0.9, // HEDIS measures are evidence-based
-      penalties: [
-        ...(usingSyntheticData ? [{ type: 'synthetic_data' }] : []),
-        ...(!llmSuccess ? [{ type: 'llm_fallback' }] : []),
-        ...(careGaps.length === 0 ? [{ type: 'missing_critical_data' }] : [])
-      ],
-      boosts: []
+    // Calculate confidence using CONTROL PLANE (ClinicalConfidenceIntegration)
+    const dataCompleteness = (diagnoses.length > 0 ? 0.4 : 0) + (procedures.length > 0 ? 0.3 : 0) + (patient ? 0.3 : 0);
+    const confidenceResult = calculateClinicalConfidence(
+      {
+        intentId: 'care-gap-analysis',
+        intentMode: 'QUALITY_IMPROVEMENT',
+        recipeId: 'care-gaps-v1'
+      },
+      {
+        dataCompleteness,
+        dataQuality: isRealData ? 0.85 : 0.5,
+        sourceReliability: isRealData ? 0.9 : 0.4,      // Real clinical data = high reliability
+        modelCertainty: isRealData ? 0.85 : 0.5,        // HEDIS measures are well-defined
+        evidenceLevel: 0.9,                              // HEDIS measures are evidence-based
+        llmUsed: llmSuccess,
+        llmFailed: !llmSuccess && this.llmService,
+        syntheticData: usingSyntheticData,
+        missingCritical: careGaps.length === 0 && diagnoses.length === 0,
+        multipleSources: diagnoses.length > 0 && procedures.length > 0,
+        recentlyValidated: isRealData,
+        ehrIntegrated: isRealData
+      }
+    );
+    const confidence = confidenceResult.value;
+
+    // Add confidence calculation to reasoning
+    reasoning.push({
+      step: 'confidence_calculation',
+      thought: 'Computing clinical confidence using control plane',
+      action: 'calculate_clinical_confidence',
+      model: confidenceResult.modelId,
+      modelVersion: confidenceResult.modelVersion,
+      observation: `Confidence: ${Math.round(confidence * 100)}% (${confidenceResult.level}), canProceed: ${confidenceResult.canProceed}`
     });
 
     return this.buildResponse({
@@ -1203,12 +1693,20 @@ Focus on actionable recommendations that improve quality metrics and patient out
       type: 'care_gaps',
       summary: llmSummary || `Found ${careGaps.length} care gap(s) for patient ${patientId}`,
       confidence,
+      confidenceLevel: confidenceResult.level,
+      confidenceModel: confidenceResult.modelId,
+      confidenceModelVersion: confidenceResult.modelVersion,
+      canProceed: confidenceResult.canProceed,
+      safetyFlag: confidenceResult.safetyFlag,
       confidenceFactors: {
+        ...confidenceResult.factors,
         sourceType: usingSyntheticData ? 'synthetic_demo' : 'database',
         llmGenerated: llmSuccess,
         gapsIdentified: careGaps.length,
         measureSource: 'HEDIS Quality Measures'
       },
+      confidencePenalties: confidenceResult.penalties,
+      confidenceBoosts: confidenceResult.boosts,
       reasoning,
       data: {
         patientId,
@@ -1463,6 +1961,131 @@ Focus on actionable recommendations that improve quality metrics and patient out
   }
 
   /**
+   * Convert Gremlin properties() array to object
+   * Properties array format: [{key: "firstName", value: "John"}, ...]
+   */
+  convertPropertiesToObject(propertiesArray) {
+    if (!propertiesArray || !Array.isArray(propertiesArray)) return null;
+    const obj = {};
+    for (const prop of propertiesArray) {
+      if (prop.key && prop.value !== undefined) {
+        obj[prop.key] = prop.value;
+      }
+    }
+    return Object.keys(obj).length > 0 ? obj : null;
+  }
+
+  /**
+   * Convert Gremlin properties() array to array of objects (for multiple vertices)
+   * Detects vertex boundaries by duplicate keys — when we see a key already in
+   * currentObj, we've crossed into a new vertex's properties.
+   */
+  convertPropertiesToObjects(propertiesArray) {
+    if (!propertiesArray || !Array.isArray(propertiesArray)) return [];
+    const objects = [];
+    let currentObj = {};
+
+    for (const prop of propertiesArray) {
+      if (prop.key && prop.value !== undefined) {
+        // If this key already exists in currentObj, we've hit a new vertex
+        if (currentObj.hasOwnProperty(prop.key)) {
+          objects.push(currentObj);
+          currentObj = {};
+        }
+        currentObj[prop.key] = prop.value;
+      }
+    }
+
+    // Don't forget the last object
+    if (Object.keys(currentObj).length > 0) {
+      objects.push(currentObj);
+    }
+
+    return objects;
+  }
+
+  /**
+   * Convert natural language query to equivalent slash command
+   * Used as fallback when LLM is not available
+   */
+  convertToSlashCommand(query, routing) {
+    if (!query) return null;
+    const q = query.toLowerCase().trim();
+
+    // Treatment patterns
+    const treatmentPatterns = [
+      /(?:what|how).*treatment.*(?:for|of)\s+(.+?)(?:\?|$)/i,
+      /(?:how|what).*treat\s+(.+?)(?:\?|$)/i,
+      /treatment\s+(?:options?|recommendations?|plan)?\s*(?:for)?\s*(.+?)(?:\?|$)/i,
+      /recommend.*(?:for|treating)\s+(.+?)(?:\?|$)/i
+    ];
+    for (const pattern of treatmentPatterns) {
+      const match = query.match(pattern);
+      if (match && match[1]) {
+        return `/treatment ${match[1].trim()}`;
+      }
+    }
+
+    // Patient patterns
+    const patientPatterns = [
+      /(?:show|get|find|lookup|look up).*patient\s+(.+?)(?:\?|$)/i,
+      /patient\s+(?:summary|info|information|data)\s+(?:for\s+)?(.+?)(?:\?|$)/i,
+      /(?:who|what|tell me about).*patient\s+(.+?)(?:\?|$)/i
+    ];
+    for (const pattern of patientPatterns) {
+      const match = query.match(pattern);
+      if (match && match[1]) {
+        return `/patient ${match[1].trim()}`;
+      }
+    }
+
+    // Care gaps patterns
+    const careGapsPatterns = [
+      /care\s+gaps?\s+(?:for\s+)?(.+?)(?:\?|$)/i,
+      /(?:what|show|find).*(?:missing|gaps?).*(?:for\s+)?(?:patient\s+)?(.+?)(?:\?|$)/i
+    ];
+    for (const pattern of careGapsPatterns) {
+      const match = query.match(pattern);
+      if (match && match[1]) {
+        return `/care-gaps ${match[1].trim()}`;
+      }
+    }
+
+    // Drug interaction patterns
+    const drugPatterns = [
+      /(?:drug|medication)\s+(?:interaction|check).*?(\w+(?:\s+(?:and|with|,)\s+\w+)+)/i,
+      /(?:can|does|do).*take\s+(\w+).*(?:with|and)\s+(\w+)/i
+    ];
+    for (const pattern of drugPatterns) {
+      const match = query.match(pattern);
+      if (match) {
+        const drugs = match[1] || `${match[1]} ${match[2]}`;
+        return `/drug-check ${drugs.replace(/\s+(and|with|,)\s+/g, ' ')}`;
+      }
+    }
+
+    // Use routing intent if available
+    if (routing?.intent?.id) {
+      const intentId = routing.intent.id.replace(/^hc:/, '');
+      const params = routing.intent.parameters || {};
+
+      switch (intentId) {
+        case 'treatment-recommendation':
+          if (params.condition) return `/treatment ${params.condition}`;
+          break;
+        case 'patient-summary':
+          if (params.patientId) return `/patient ${params.patientId}`;
+          break;
+        case 'care-gaps':
+          if (params.patientId) return `/care-gaps ${params.patientId}`;
+          break;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Process a healthcare request through the orchestration pipeline
    * Supports both slash commands (/patient P001) and natural language (patient summary for P001)
    */
@@ -1481,16 +2104,111 @@ Focus on actionable recommendations that improve quality metrics and patient out
     try {
       const query = request.query || '';
 
-      // Check for slash commands first - route directly to handleSlashCommand
+      // ============================================================
+      // PHASE 10: All paths go through NLS with Zod envelopes
+      // Three-tier classification: Slash Commands → Deterministic NLS → LLM Fallback
+      // ============================================================
+
+      // 1. Parse intent using NaturalLanguageService (returns IntentParseEnvelope)
+      const parseEnvelope = await this.parseIntentWithNLS(query, context);
+
+      if (parseEnvelope) {
+        const payload = parseEnvelope.payload;
+        const trace = payload.trace || {};
+
+        reasoning.push({
+          step: 'nls_parse',
+          thought: `Parsed intent via ${trace.parserUsed || 'unknown'} (Tier ${trace.tier || '?'})`,
+          action: 'parse_intent',
+          observation: `Intent: ${payload.intentId || 'needs clarification'}, Confidence: ${payload.parseConfidence?.toFixed(2)}`
+        });
+
+        // Check if clarification is required
+        if (payload.requiresClarification) {
+          const clarification = payload.clarification || {};
+          reasoning.push({
+            step: 'clarification_needed',
+            thought: `Intent unclear: ${clarification.reason}`,
+            action: 'request_clarification',
+            observation: clarification.message
+          });
+
+          return this.buildResponse({
+            requestId,
+            success: false,
+            type: 'clarification_needed',
+            summary: clarification.message,
+            clarification,
+            options: clarification.options,
+            parseEnvelope: parseEnvelope.header?.envelopeId,
+            reasoning,
+            duration: Date.now() - startTime
+          });
+        }
+
+        // Check for known healthcare intent with sufficient confidence
+        const intentId = payload.intentId;
+        const confidence = payload.parseConfidence;
+
+        if (intentId && confidence >= 0.7) {
+          this.logger.info(`NLS resolved intent '${intentId}' with confidence ${confidence} via ${trace.parserUsed}`);
+
+          // Map NLS intentId to slash command format for existing handlers
+          const commandMap = {
+            'hc:patient-summary': '/patient',
+            'hc:treatment-recommendation': '/treatment',
+            'hc:care-gaps': '/care-gaps',
+            'hc:emergency-triage': '/triage',
+            'hc:drug-check': '/drug-check',
+            'clinical.staging.readiness': '/staging',
+            'clinical.med_safety.check': '/drug-check'
+          };
+
+          // Extract parameters from parse result
+          const params = (payload.parameters || [])
+            .filter(p => p.value)
+            .map(p => p.value)
+            .join(' ');
+
+          const commandPrefix = commandMap[intentId];
+          if (commandPrefix) {
+            // Convert to slash command for architecture-based execution
+            const slashCommand = params ? `${commandPrefix} ${params}` : commandPrefix;
+            reasoning.push({
+              step: 'intent_resolved',
+              thought: `High-confidence intent resolved to command: ${slashCommand}`,
+              action: 'execute_command',
+              observation: `Using ${trace.parserUsed} parser, Tier ${trace.tier}`
+            });
+
+            return await this.handleSlashCommand(slashCommand, {
+              ...context,
+              parseEnvelope,
+              nlsConfidence: confidence,
+              nlsTrace: trace
+            }, requestId, startTime);
+          }
+        }
+
+        // Lower confidence or unknown intent - try pattern-based routing
+        // Fall through to legacy routing for intents not in command map
+      }
+
+      // ============================================================
+      // Legacy fallback: Direct slash commands or pattern-based routing
+      // (for backwards compatibility when NLS unavailable or unrecognized intent)
+      // ============================================================
+
+      // Direct slash commands bypass NLS routing
       if (query.startsWith('/')) {
         return await this.handleSlashCommand(query, context, requestId, startTime);
       }
 
-      // For natural language queries, detect intent first
+      // For natural language queries without NLS match, use legacy intent detection
       // 1. Route the request - detect intent and mode
       const routing = await this.routeRequest(request, context);
       reasoning.push({
-        step: 'intent_detection',
+        step: 'legacy_intent_detection',
         thought: `Detected intent: ${routing.intent?.id || 'unknown'}`,
         action: 'route_request',
         observation: `Mode: ${routing.mode}, Recipe: ${routing.recipe?.id || 'none'}`
@@ -1518,19 +2236,15 @@ Focus on actionable recommendations that improve quality metrics and patient out
       }
 
       // 3. For healthcare intents with good confidence, use architecture-based execution
-      //    This uses the same RecipeExecutor path as slash commands
       const healthcareIntents = ['patient-summary', 'treatment-recommendation', 'care-gap-analysis', 'drug-interaction-check'];
-      const intentId = routing.intent?.id?.replace(/^hc:/, '') || '';
+      const legacyIntentId = routing.intent?.id?.replace(/^hc:/, '') || '';
 
-      if (healthcareIntents.includes(intentId) && routing.intent?.confidence >= 0.7) {
-        this.logger.info(`NL query matched healthcare intent '${intentId}' with confidence ${routing.intent.confidence}`);
-
-        // Convert NL query to equivalent format for architecture-based handler
-        // The handleArchitectureBasedCommand extracts inputs from the query
+      if (healthcareIntents.includes(legacyIntentId) && routing.intent?.confidence >= 0.7) {
+        this.logger.info(`Legacy routing matched healthcare intent '${legacyIntentId}' with confidence ${routing.intent.confidence}`);
         return await this.handleArchitectureBasedCommand(query, context, requestId, startTime);
       }
 
-      // 4. Check if this maps to a recipe (structured task) - lower confidence intents
+      // 4. Check if this maps to a recipe (structured task)
       if (routing.recipe) {
         return this.executeRecipe(request, routing, context, reasoning, requestId, startTime);
       }
@@ -1654,10 +2368,27 @@ Focus on actionable recommendations that improve quality metrics and patient out
    */
   async runReActLoop(request, routing, context, reasoning) {
     if (!this.llmService) {
+      // Try to convert natural language to a slash command
+      const slashCommand = this.convertToSlashCommand(request.query, routing);
+      if (slashCommand) {
+        reasoning.push({
+          step: 'nl_conversion',
+          thought: `Converting natural language to slash command: ${slashCommand}`,
+          action: 'convert_to_command',
+          observation: 'LLM not available, using pattern-based conversion'
+        });
+        return await this.handleSlashCommand(slashCommand, context, request.requestId || `req_${Date.now()}`, Date.now());
+      }
+
+      // Can't convert - return helpful error
       return {
         success: false,
-        type: 'error',
-        summary: 'LLM service not configured for ReAct loop'
+        type: 'guidance',
+        summary: 'I understood your question but need more specific input. Try using these commands:\n' +
+                 '• /treatment [condition] - e.g., /treatment diabetes type 2\n' +
+                 '• /patient [name or ID] - e.g., /patient John Smith\n' +
+                 '• /care-gaps [patient] - e.g., /care-gaps MRN-12345\n' +
+                 '• /drug-check [drugs] - e.g., /drug-check warfarin aspirin'
       };
     }
 
@@ -1998,7 +2729,7 @@ Show your reasoning at each step.`;
       query += `.has('userId', '${input.user_id}')`;
     }
 
-    query += `.order().by('timestamp', decr).limit(100).valueMap()`;
+    query += `.order().by('timestamp', desc).limit(100).valueMap()`;
 
     const entries = await this.graphService.client.query(query);
 
@@ -2373,6 +3104,15 @@ Show your reasoning at each step.`;
         summary: result.summary,
         root_cause: result.root_cause,
         confidence: result.confidence,
+        // Control plane confidence audit trail
+        confidenceLevel: result.confidenceLevel,
+        confidenceModel: result.confidenceModel,
+        confidenceModelVersion: result.confidenceModelVersion,
+        canProceed: result.canProceed,
+        safetyFlag: result.safetyFlag,
+        confidenceFactors: result.confidenceFactors,
+        confidencePenalties: result.confidencePenalties,
+        confidenceBoosts: result.confidenceBoosts,
         findings: result.findings,
         routing: result.routing,
         execution: result.execution,

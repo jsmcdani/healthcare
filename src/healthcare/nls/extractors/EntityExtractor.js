@@ -10,9 +10,10 @@ const logger = new Logger('EntityExtractor');
 const ENTITY_PATTERNS = {
   patientId: [
     { name: 'mrn_prefixed', regex: /(?:MRN|mrn|M)[-:]?\s*(\d{3,10})/i, confidence: 0.95, transform: (m) => `MRN-${m[1]}` },
-    { name: 'patient_prefixed', regex: /(?:patient|pt|p)[-:\s]?([A-Z]?\d{3,10})/i, confidence: 0.9, transform: (m) => m[1].toUpperCase() },
+    { name: 'patient_prefixed', regex: /(?:patient|pt)[-:\s]+([A-Z]?\d{3,10})/i, confidence: 0.9, transform: (m) => m[1].toUpperCase() },
     { name: 'alphanumeric_id', regex: /\b([A-Z]{1,3}[-]?\d{3,10})\b/, confidence: 0.75, transform: (m) => m[1] },
-    { name: 'numeric_only', regex: /\b(\d{5,10})\b/, confidence: 0.5, transform: (m) => m[1] }
+    { name: 'numeric_only', regex: /\b(\d{5,10})\b/, confidence: 0.5, transform: (m) => m[1] },
+    { name: 'patient_name', regex: /^([A-Z][a-z]+)\s+([A-Z][a-z]+)$/i, confidence: 0.85, transform: (m) => `${m[1]} ${m[2]}` }
   ],
   timeRange: [
     { name: 'months_format', regex: /\b(\d+)\s*months?\b/i, confidence: 0.9, transform: (m) => `${m[1]}months` },
@@ -68,9 +69,14 @@ export class EntityExtractor {
   }
 
   toParameterArray(entities) {
-    return Object.entries(entities).map(([name, data]) => ({
-      name, value: data.value, source: data.source || ParameterSource.EXPLICIT, confidence: data.confidence
-    }));
+    return Object.entries(entities)
+      .filter(([name, data]) => data.confidence !== undefined)  // Only include entities with confidence
+      .map(([name, data]) => ({
+        name,
+        value: data.value,
+        source: data.source || ParameterSource.EXPLICIT,
+        confidence: data.confidence
+      }));
   }
 
   mergeEntities(base, additional) {
