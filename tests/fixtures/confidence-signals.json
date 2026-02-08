@@ -1,0 +1,267 @@
+{
+  "clinical": {
+    "highConfidence": {
+      "context": {
+        "intentId": "treatment-recommendation",
+        "intentMode": "CLINICAL_DECISION_SUPPORT",
+        "recipeId": "treatment-lookup",
+        "decisionType": "treatment"
+      },
+      "signals": {
+        "dataCompleteness": 0.95,
+        "dataQuality": 0.9,
+        "sourceReliability": 0.85,
+        "modelCertainty": 0.8,
+        "evidenceLevel": 0.9,
+        "temporalRelevance": 0.85,
+        "llmUsed": false,
+        "llmFailed": false,
+        "missingCritical": false,
+        "hasDataConflict": false,
+        "syntheticData": false,
+        "multipleSources": true,
+        "expertReviewed": true,
+        "cacheHits": 2,
+        "totalSteps": 3
+      }
+    },
+    "lowConfidence": {
+      "context": {
+        "intentId": "patient-summary",
+        "intentMode": "CLINICAL_DECISION_SUPPORT",
+        "recipeId": "summary-build",
+        "decisionType": "treatment"
+      },
+      "signals": {
+        "dataCompleteness": 0.3,
+        "dataQuality": 0.4,
+        "sourceReliability": 0.3,
+        "modelCertainty": 0.35,
+        "evidenceLevel": 0.25,
+        "temporalRelevance": 0.4,
+        "llmUsed": true,
+        "llmFailed": true,
+        "missingCritical": false,
+        "hasDataConflict": false,
+        "syntheticData": false,
+        "multipleSources": false,
+        "expertReviewed": false,
+        "cacheHits": 0,
+        "totalSteps": 5
+      }
+    },
+    "uncertain": {
+      "context": {
+        "intentId": "diagnosis-support",
+        "intentMode": "CLINICAL_DECISION_SUPPORT",
+        "recipeId": "diagnosis-workflow",
+        "decisionType": "diagnostic"
+      },
+      "signals": {
+        "dataCompleteness": 0.1,
+        "dataQuality": 0.2,
+        "sourceReliability": 0.3,
+        "modelCertainty": 0.15,
+        "evidenceLevel": 0.1,
+        "temporalRelevance": 0.2,
+        "llmUsed": false,
+        "llmFailed": false,
+        "missingCritical": true,
+        "hasDataConflict": false,
+        "syntheticData": false,
+        "multipleSources": false,
+        "expertReviewed": false,
+        "cacheHits": 0,
+        "totalSteps": 3
+      }
+    },
+    "syntheticPenalty": {
+      "context": {
+        "intentId": "treatment-recommendation",
+        "intentMode": "CLINICAL_DECISION_SUPPORT",
+        "recipeId": "treatment-lookup",
+        "decisionType": "treatment"
+      },
+      "signals": {
+        "dataCompleteness": 0.8,
+        "dataQuality": 0.7,
+        "sourceReliability": 0.75,
+        "modelCertainty": 0.6,
+        "evidenceLevel": 0.7,
+        "temporalRelevance": 0.8,
+        "llmUsed": false,
+        "llmFailed": false,
+        "missingCritical": false,
+        "hasDataConflict": false,
+        "syntheticData": true,
+        "multipleSources": false,
+        "expertReviewed": false,
+        "cacheHits": 0,
+        "totalSteps": 3
+      }
+    },
+    "drugInteraction": {
+      "context": {
+        "intentId": "drug-interaction-check",
+        "intentMode": "PHARMACY",
+        "recipeId": "interaction-check",
+        "decisionType": "medication"
+      },
+      "signals": {
+        "dataCompleteness": 0.8,
+        "dataQuality": 0.85,
+        "sourceReliability": 0.9,
+        "modelCertainty": 0.75,
+        "evidenceLevel": 0.85,
+        "temporalRelevance": 0.9,
+        "llmUsed": false,
+        "llmFailed": false,
+        "missingCritical": false,
+        "hasDataConflict": false,
+        "syntheticData": false,
+        "multipleSources": true,
+        "expertReviewed": false,
+        "multipleDatabases": true,
+        "cacheHits": 1,
+        "totalSteps": 4
+      }
+    }
+  },
+  "nls": {
+    "triggerMatch": {
+      "matchType": "trigger",
+      "rawConfidence": 1.0,
+      "queryLength": 20,
+      "hasAmbiguity": false,
+      "closeMatchCount": 0,
+      "entityCompleteness": 1.0,
+      "missingRequired": false,
+      "intentId": "patient-summary"
+    },
+    "patternMatch": {
+      "matchType": "pattern",
+      "rawConfidence": 0.85,
+      "queryLength": 25,
+      "hasAmbiguity": false,
+      "closeMatchCount": 0,
+      "entityCompleteness": 1.0,
+      "missingRequired": false,
+      "intentId": "patient-summary"
+    },
+    "llmFallback": {
+      "matchType": "llm",
+      "rawConfidence": 0.65,
+      "queryLength": 40,
+      "hasAmbiguity": false,
+      "closeMatchCount": 0,
+      "entityCompleteness": 0.8,
+      "missingRequired": false,
+      "intentId": "care-gaps"
+    },
+    "ambiguous": {
+      "matchType": "pattern",
+      "rawConfidence": 0.6,
+      "queryLength": 15,
+      "hasAmbiguity": true,
+      "closeMatchCount": 3,
+      "entityCompleteness": 0.7,
+      "missingRequired": false,
+      "intentId": "patient-summary"
+    },
+    "noMatch": {
+      "matchType": "none",
+      "rawConfidence": 0,
+      "queryLength": 5,
+      "hasAmbiguity": false,
+      "closeMatchCount": 0,
+      "entityCompleteness": 0,
+      "missingRequired": true,
+      "intentId": null
+    },
+    "shortQuery": {
+      "matchType": "synonym",
+      "rawConfidence": 0.55,
+      "queryLength": 3,
+      "hasAmbiguity": false,
+      "closeMatchCount": 0,
+      "entityCompleteness": 0.5,
+      "missingRequired": false,
+      "intentId": "patient-summary"
+    }
+  },
+  "models": {
+    "minimalValid": {
+      "modelId": "test_model_v1",
+      "modelVersion": "1.0.0",
+      "name": "Test Model",
+      "factors": [
+        {
+          "id": "test_factor",
+          "name": "Test Factor",
+          "weight": 1.0,
+          "source": "data_completeness",
+          "defaultValue": 0.5
+        }
+      ],
+      "thresholds": {
+        "high": 0.85,
+        "moderate": 0.65,
+        "low": 0.40
+      },
+      "metadata": {
+        "createdAt": "2025-02-04T00:00:00.000Z",
+        "domain": "test"
+      }
+    },
+    "twoFactor": {
+      "modelId": "two_factor_v1",
+      "modelVersion": "1.0.0",
+      "name": "Two Factor Test Model",
+      "factors": [
+        {
+          "id": "factor_a",
+          "name": "Factor A",
+          "weight": 0.6,
+          "source": "data_completeness",
+          "defaultValue": 0.5
+        },
+        {
+          "id": "factor_b",
+          "name": "Factor B",
+          "weight": 0.4,
+          "source": "data_quality",
+          "defaultValue": 0.5
+        }
+      ],
+      "penalties": [
+        {
+          "id": "penalty_test",
+          "condition": "testPenalty",
+          "multiplier": 0.5,
+          "description": "50% penalty for testing"
+        }
+      ],
+      "boosts": [
+        {
+          "id": "boost_test",
+          "condition": "testBoost",
+          "additive": 0.1,
+          "description": "10% boost for testing"
+        }
+      ],
+      "thresholds": {
+        "high": 0.85,
+        "moderate": 0.65,
+        "low": 0.40
+      },
+      "uncertaintyTriggers": [
+        "missing_critical_data",
+        "conflicting_evidence"
+      ],
+      "metadata": {
+        "createdAt": "2025-02-04T00:00:00.000Z",
+        "domain": "test"
+      }
+    }
+  }
+}
