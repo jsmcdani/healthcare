@@ -1,0 +1,56 @@
+{
+  "id": "routing-governance",
+  "version": "1.0.0",
+  "description": "Rules every routable item (orchestrator skill, agent, topic, skill, action) must pass before it is saved or shared. Routing in Coworker-style hosts is flat: the model reads every description in one list and picks. These rules keep that list unambiguous.",
+
+  "kinds": ["orchestrator_skill", "agent", "topic", "skill", "action"],
+
+  "name": {
+    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+){0,6}$",
+    "maxLength": 64,
+    "hint": "lowercase words joined by hyphens, ideally domain-verb-scope, e.g. pipeline-review-team"
+  },
+
+  "description": {
+    "minWords": 12,
+    "maxWords": 70,
+    "maxChars": 480,
+    "charsPerToken": 4
+  },
+
+  "clauses": {
+    "useWhen": ["use when", "use this when", "use it when", "use for", "invoke when", "trigger when"],
+    "notFor": ["not for", "do not use for", "don't use for", "do not use when", "don't use when", "never for"],
+    "requireNotFor": ["orchestrator_skill", "agent", "topic", "skill"]
+  },
+
+  "vagueTerms": [
+    "anything", "everything", "various", "general purpose", "general-purpose", "generic",
+    "misc", "miscellaneous", "helps with", "assists with", "assist with", "etc", "and more",
+    "all kinds of", "stuff", "things", "whatever"
+  ],
+
+  "scopes": {
+    "individual": ["my own", "for me", "individual rep", "a single rep", "personal"],
+    "team": ["my team", "team's", "the team", "team-level", "for a manager"],
+    "org": ["the org", "org-wide", "organization", "company-wide", "enterprise-wide", "all teams"]
+  },
+
+  "triggers": {
+    "minShould": 3,
+    "minShouldNot": 2
+  },
+
+  "structure": {
+    "skillsRequireTopicParent": "warning",
+    "comment": "Skills hold know-how and sit under a topic, which routes. Set to 'error' once the topic-then-skill restructure is in place."
+  },
+
+  "collision": {
+    "warnSimilarity": 0.35,
+    "blockSimilarity": 0.6,
+    "crossLayerWarnSimilarity": 0.6,
+    "nearTieMargin": 0.05,
+    "catalogTokenBudgetPerList": 4000
+  }
+}

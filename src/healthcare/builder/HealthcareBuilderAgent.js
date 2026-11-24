@@ -42,7 +42,8 @@ const BUILDER_ROLES = {
       'create_test_case', 'create_test_suite', 'run_calibration', 'analyze_calibration_results',
       'list_ai_experts', 'test_ai_expert', 'list_knowledge_packs', 'query_knowledge',
       'list_ground_truth_sources', 'test_source_query',
-      'run_correctness_tests', 'validate_expert_output', 'test_end_to_end', 'generate_test_report'
+      'run_correctness_tests', 'validate_expert_output', 'test_end_to_end', 'generate_test_report',
+      'check_routable_description', 'gate_routable', 'audit_routing_catalog'
     ].includes(tool)
   },
   developer: {
@@ -50,7 +51,8 @@ const BUILDER_ROLES = {
     canAccess: (tool) => [
       'test_ai_expert', 'test_assertion', 'test_recipe', 'test_policy', 'test_source_query',
       'run_correctness_tests', 'validate_expert_output', 'test_end_to_end', 'generate_test_report',
-      'list_ai_experts', 'list_knowledge_packs', 'list_recipes', 'list_policies', 'list_assertions'
+      'list_ai_experts', 'list_knowledge_packs', 'list_recipes', 'list_policies', 'list_assertions',
+      'check_routable_description', 'audit_routing_catalog'
     ].includes(tool)
   }
 };
@@ -387,6 +389,7 @@ export class HealthcareBuilderAgent {
     const { recipeTools } = await import('./tools/recipe-tools.js');
     const { policyTools } = await import('./tools/policy-tools.js');
     const { healthcareTestingTools } = await import('./tools/healthcare-testing-tools.js');
+    const { routingGovernanceTools } = await import('./tools/routing-governance-tools.js');
 
     const allTools = [
       ...aiExpertTools,
@@ -396,7 +399,8 @@ export class HealthcareBuilderAgent {
       ...calibrationTools,
       ...recipeTools,
       ...policyTools,
-      ...healthcareTestingTools
+      ...healthcareTestingTools,
+      ...routingGovernanceTools
     ];
 
     this.logger.debug(`Loaded ${allTools.length} builder tools`);

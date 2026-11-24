@@ -18,6 +18,10 @@ export { calibrationTools } from './tools/calibration-tools.js';
 export { recipeTools } from './tools/recipe-tools.js';
 export { policyTools } from './tools/policy-tools.js';
 export { healthcareTestingTools } from './tools/healthcare-testing-tools.js';
+export { routingGovernanceTools } from './tools/routing-governance-tools.js';
+
+// Routing governance (gate + audit for skills, topics, agents, actions)
+export { governRoutable, auditCatalog, lintRoutable, checkCollisions } from './routing/index.js';
 
 // Convenience: all tools combined
 export async function getAllBuilderTools() {
@@ -29,6 +33,7 @@ export async function getAllBuilderTools() {
   const { recipeTools } = await import('./tools/recipe-tools.js');
   const { policyTools } = await import('./tools/policy-tools.js');
   const { healthcareTestingTools } = await import('./tools/healthcare-testing-tools.js');
+  const { routingGovernanceTools } = await import('./tools/routing-governance-tools.js');
 
   return [
     ...aiExpertTools,
@@ -38,7 +43,8 @@ export async function getAllBuilderTools() {
     ...calibrationTools,
     ...recipeTools,
     ...policyTools,
-    ...healthcareTestingTools
+    ...healthcareTestingTools,
+    ...routingGovernanceTools
   ];
 }
 
@@ -82,6 +88,11 @@ export const toolCategories = {
   'Testing': {
     description: 'Run comprehensive correctness tests and generate reports',
     tools: ['run_correctness_tests', 'validate_expert_output', 'test_end_to_end', 'generate_test_report'],
+    requiredRoles: ['healthcare_builder', 'healthcare_admin', 'developer']
+  },
+  'Routing Governance': {
+    description: 'Gate skills, topics, agents and actions before save or share: description rules, collisions, route tests',
+    tools: ['check_routable_description', 'gate_routable', 'audit_routing_catalog'],
     requiredRoles: ['healthcare_builder', 'healthcare_admin', 'developer']
   }
 };

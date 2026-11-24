@@ -1,0 +1,93 @@
+{
+  "_comment": "Sample Coworker-style catalog. parentId null is Coworker's own list: its skills (playbooks that control orchestration) compete there with the agents it can delegate to.",
+  "catalog": [
+    {
+      "id": "sk-pipe-my",
+      "name": "pipeline-review-my",
+      "kind": "orchestrator_skill",
+      "parentId": null,
+      "description": "Reviews the open opportunities a rep owns: stage aging, close dates, next steps. Use when a rep asks about my own pipeline, my deals or my quota coverage. Not for a manager's view of reps: use pipeline-review-team.",
+      "triggers": {
+        "should": ["how is my own pipeline looking", "review my deals and close dates", "what is my quota coverage this quarter"],
+        "shouldNot": ["how is my team's pipeline", "brief me on the Acme account"]
+      }
+    },
+    {
+      "id": "sk-pipe-team",
+      "name": "pipeline-review-team",
+      "kind": "orchestrator_skill",
+      "parentId": null,
+      "description": "Rolls up pipeline coverage and slipped deals across every rep reporting to a manager. Use when a manager asks about my team's pipeline, rep coverage or which reps are behind. Not for a single rep's deals: use pipeline-review-my.",
+      "triggers": {
+        "should": ["how is my team's pipeline", "which reps are behind on coverage", "show slipped deals across reps"],
+        "shouldNot": ["review my deals and close dates", "update the stage on this opportunity"]
+      }
+    },
+    {
+      "id": "sk-acct-brief",
+      "name": "account-brief-my",
+      "kind": "orchestrator_skill",
+      "parentId": null,
+      "description": "Prepares a meeting brief on one account: contacts, open cases, recent activity and renewal date. Use when someone asks to be briefed on an account, or what to know before a customer meeting or call. Not for pipeline numbers: use pipeline-review-my.",
+      "triggers": {
+        "should": ["brief me on the Acme account", "prep me for my meeting with Globex", "what should I know before the Initech call"],
+        "shouldNot": ["how is my own pipeline looking", "close this opportunity as won"]
+      }
+    },
+    {
+      "id": "ag-sales",
+      "name": "sales-agent",
+      "kind": "agent",
+      "parentId": null,
+      "description": "Writes changes to opportunities and accounts after confirmation: stage, amount, close date, next step. Use when the user asks to update, close or log something on a record. Not for reviews or briefs: use pipeline-review-my or account-brief-my.",
+      "triggers": {
+        "should": ["update the stage on this opportunity", "close this opportunity as won", "log a call on the Acme record"],
+        "shouldNot": ["review my deals and close dates", "brief me on the Acme account"]
+      }
+    },
+    {
+      "id": "tp-opp-updates",
+      "name": "opportunity-updates",
+      "kind": "topic",
+      "parentId": "ag-sales",
+      "description": "Changes fields on an opportunity record once the user confirms: stage, amount, close date, next step. Use when the user asks to update, move or close an opportunity. Not for activity logging: use activity-logging.",
+      "triggers": {
+        "should": ["update the stage on this opportunity", "move the close date to next month", "close this opportunity as won"],
+        "shouldNot": ["log a call on the Acme record", "note that I emailed the buyer"]
+      }
+    },
+    {
+      "id": "tp-activity",
+      "name": "activity-logging",
+      "kind": "topic",
+      "parentId": "ag-sales",
+      "description": "Records calls, emails and meetings as activities against an account or contact. Use when the user asks to log a call, record an email or note a meeting. Not for changing opportunity fields: use opportunity-updates.",
+      "triggers": {
+        "should": ["log a call on the Acme record", "note that I emailed the buyer", "record today's meeting with Globex"],
+        "shouldNot": ["update the stage on this opportunity", "close this opportunity as won"]
+      }
+    },
+    {
+      "id": "sk-stage-playbook",
+      "name": "stage-change-playbook",
+      "kind": "skill",
+      "parentId": "tp-opp-updates",
+      "description": "Procedure for moving an opportunity between stages: exit criteria per stage, required fields, and the confirmation format. Use when a deal is being moved or advanced to a new stage, such as proposal or negotiation. Not for close-won paperwork: use close-won-checklist.",
+      "triggers": {
+        "should": ["move this deal to negotiation", "what is needed to advance the stage", "change stage to proposal"],
+        "shouldNot": ["close this opportunity as won", "log a call on the Acme record"]
+      }
+    },
+    {
+      "id": "sk-close-won",
+      "name": "close-won-checklist",
+      "kind": "skill",
+      "parentId": "tp-opp-updates",
+      "description": "Checklist for closing an opportunity as won: signed contract, booking amount, handoff to onboarding. Use when a deal is being closed won or booked. Not for ordinary stage moves: use stage-change-playbook.",
+      "triggers": {
+        "should": ["close this opportunity as won", "book the Acme deal", "we signed, mark it won"],
+        "shouldNot": ["move this deal to negotiation", "change stage to proposal"]
+      }
+    }
+  ]
+}
