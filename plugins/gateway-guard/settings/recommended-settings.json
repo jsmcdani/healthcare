@@ -1,0 +1,23 @@
+{
+  "_comment": "Settings layer that goes with the gateway-guard hooks. Put it in managed settings for customers, or in .claude/settings.json for a project. Replace gateway.example.com with your gateway host and the plugin source with yours.",
+
+  "permissions": {
+    "deny": [
+      "Bash(sf:*)",
+      "Bash(sfdx:*)",
+      "Bash(npx sf:*)",
+      "Read(~/.sf/**)",
+      "Read(~/.sfdx/**)"
+    ]
+  },
+
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["gateway.example.com"],
+      "deniedDomains": ["*.salesforce.com", "*.force.com", "*.salesforce-setup.com", "*.cloudforce.com", "*.visualforce.com"]
+    }
+  },
+
+  "_managed_only": "In managed settings, also set allowManagedHooksOnly: true and force-enable this plugin under enabledPlugins, so users can't switch the hooks off and only managed or force-enabled hooks run."
+}

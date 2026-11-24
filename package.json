@@ -22,6 +22,7 @@
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --selectProjects unit",
     "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --selectProjects integration",
+    "test:guard": "node --test plugins/gateway-guard/test/guard.test.mjs",
     "test:api": "node scripts/test-api.js",
     "test:label": "node scripts/test-label-api.js",
     "test:health": "node scripts/test-health.js",

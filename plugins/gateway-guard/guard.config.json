@@ -1,0 +1,58 @@
+{
+  "_comment": "Defaults for gateway-guard. Override per project in .claude/gateway-guard.json, or point GATEWAY_GUARD_CONFIG at a file. Regex strings are case-insensitive.",
+
+  "gatewayToolPrefixes": ["mcp__gateway__"],
+  "_gatewayToolPrefixes": "SET THIS to your gateway's MCP tool prefix. A server named 'gateway' gives mcp__gateway__; one shipped inside a plugin gives mcp__plugin_<plugin>_<server>__.",
+
+  "mcp": {
+    "mode": "deny-org-reaching",
+    "_mode": "'deny-org-reaching' blocks non-gateway MCP tools whose name or input points at the org. 'allowlist' blocks every MCP tool not in gatewayToolPrefixes or allowedMcpPrefixes.",
+    "allowedMcpPrefixes": [],
+    "orgToolNamePatterns": ["salesforce", "sfdc", "soql", "force_?com"]
+  },
+
+  "salesforceHosts": [
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.salesforce\\.com",
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.force\\.com",
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.salesforce-setup\\.com",
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.cloudforce\\.com",
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.visualforce\\.com",
+    "(^|[^a-z0-9-])[a-z0-9.-]*\\.salesforce-sites\\.com"
+  ],
+
+  "cliPatterns": [
+    "(^|[\\n;&|(`]|\\$\\()\\s*(sudo\\s+|env\\s+(\\S+=\\S+\\s+)*|(npx|bunx|pnpm\\s+dlx|yarn\\s+dlx)\\s+(-y\\s+)?(@salesforce/cli\\s+)?)?(sf|sfdx)\\s+[a-z]",
+    "(system|exec|execsync|execfilesync|spawn|spawnsync|popen|check_output|run|call)\\s*\\(\\s*[\\[(]?\\s*['\"`](sf|sfdx)['\"`\\s]",
+    "@salesforce/cli"
+  ],
+
+  "clientLibraries": ["jsforce", "simple_salesforce", "simple-salesforce", "@salesforce/core", "salesforce-bulk", "sfdclib", "force-cli"],
+
+  "tokenPatterns": [
+    "00d[a-z0-9]{12,15}![a-z0-9._-]{20,}",
+    "force://[^\\s'\"]+",
+    "\\b(sf|sfdx)_(access_token|auth_url|instance_url)\\b",
+    "\\binstance_url\\b"
+  ],
+
+  "credentialPaths": ["/\\.sf/", "/\\.sfdx/", "~/\\.sf(/|\\b)", "~/\\.sfdx(/|\\b)", "\\$home/\\.sfdx?(/|\\b)"],
+
+  "scriptExtensions": [".js", ".mjs", ".cjs", ".ts", ".mts", ".py", ".sh", ".bash", ".zsh", ".rb", ".ps1", ".go", ".java", ".php"],
+  "maxScriptBytes": 1048576,
+
+  "allowPathPrefixes": [],
+  "_allowPathPrefixes": "Absolute paths whose files may mention the org (e.g. the gateway's own source). Empty by default: run gateway development in a different session from the plugin.",
+
+  "denyMessage": "Blocked by gateway-guard: {reason}. Org data, metadata and deploys go through the gateway tools ({gateway}). If a gateway call is failing, stop and tell the user what failed. Do not try another route to the org.",
+
+  "receipts": {
+    "patterns": ["\"receipt\"\\s*:\\s*\"([a-z0-9_:.-]{6,})\"", "\\b(gw_[a-z0-9]{6,})\\b"],
+    "claimPatterns": [
+      "\\b(001|003|005|006|00q|00d|500|701|00t|00u|0pa|a0[0-9a-z])[a-z0-9]{12}([a-z0-9]{3})?\\b",
+      "\\b(according to|in|from|per) (the|your) (salesforce )?org\\b",
+      "\\b(opportunit(y|ies)|accounts?|cases?|leads?|contacts?)\\b[^.\\n]{0,60}\\b(amount|stage|owner|close date|status)\\b[^.\\n]{0,40}[$0-9]"
+    ],
+    "_claimPatterns": "Signals that an answer states org data. Tune to your vocabulary; record IDs are the strongest signal.",
+    "blockMessage": "Your answer states org data ({signal}) but no gateway call in this turn returned a receipt{failure}. Either call the gateway tools ({gateway}) and answer from their result, or tell the user you don't have the data. Do not answer from memory or from any other route."
+  }
+}

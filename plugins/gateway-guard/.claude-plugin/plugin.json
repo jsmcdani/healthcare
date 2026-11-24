@@ -1,0 +1,5 @@
+{
+  "name": "gateway-guard",
+  "version": "0.1.0",
+  "description": "Keeps org access on the gateway: blocks direct Salesforce calls from Claude Code and rejects answers that state org data without a gateway receipt."
+}
