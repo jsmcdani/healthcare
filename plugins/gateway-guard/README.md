@@ -80,7 +80,7 @@ All patterns are in `guard.config.json`. Override any key per project with
 node --test plugins/gateway-guard/test/guard.test.mjs
 ```
 
-38 tests: 18 bypass routes blocked (including writing a script and then running it),
+39 tests: 18 bypass routes blocked, the guard protecting its own config and settings (including writing a script and then running it),
 everyday work left alone, allowlist mode, project override, failing closed, and the
 receipt cycle (block without a receipt, pass with one, forged receipts from other tools
 ignored, no carry-over between turns, failure named, no loop).

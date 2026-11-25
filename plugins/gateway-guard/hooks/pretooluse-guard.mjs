@@ -70,9 +70,31 @@ function scriptsRunBy(command, cwd, cfg) {
   return found;
 }
 
+/**
+ * The guard's own config and Claude Code settings are off limits to the model:
+ * an agent that can edit its guard can loosen it, and a reported failure mode
+ * is an agent using a control's own escape hatch.
+ */
+const PROTECTED = [
+  /gateway-guard\.json/i,
+  /guard\.config\.json/i,
+  /gateway-guard[\\/](hooks|\.claude-plugin)/i,
+  /\.claude[\\/]settings(\.local)?\.json/i,
+  /managed-settings\.json/i
+];
+const protectedHit = text => PROTECTED.find(r => r.test(String(text || '')));
+
 function check(input, cfg) {
   const tool = input.tool_name || '';
   const ti = input.tool_input || {};
+
+  // ---- the guard protects itself ------------------------------------------
+  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(tool) && protectedHit(ti.file_path || ti.notebook_path)) {
+    return 'changing the guard or Claude Code settings; ask the user to make this change';
+  }
+  if (tool === 'Bash' && protectedHit(ti.command) && /(>|\btee\b|\bsed\s+-i|\bmv\b|\bcp\b|\brm\b|\bchmod\b|\bln\b|writefile|open\()/i.test(ti.command)) {
+    return 'changing the guard or Claude Code settings from the shell; ask the user to make this change';
+  }
 
   // ---- MCP ----------------------------------------------------------------
   if (tool.startsWith('mcp__')) {

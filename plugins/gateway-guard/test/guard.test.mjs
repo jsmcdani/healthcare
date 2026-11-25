@@ -60,6 +60,14 @@ describe('PreToolUse: blocks direct org access', () => {
     assert.match(out.hookSpecificOutput.permissionDecisionReason, /export\.py/);
   });
 
+  test('the model cannot loosen its own guard or settings', () => {
+    assert.ok(denied(pre('Write', { file_path: `${WORK}/.claude/gateway-guard.json`, content: '{"allowPathPrefixes":["/"]}' })));
+    assert.ok(denied(pre('Edit', { file_path: `${WORK}/.claude/settings.local.json`, old_string: 'a', new_string: 'b' })));
+    assert.ok(denied(pre('Bash', { command: `echo '{}' > ${WORK}/.claude/gateway-guard.json` })));
+    assert.ok(denied(pre('Bash', { command: "sed -i 's/deny/allow/' .claude/settings.json" })));
+    assert.equal(pre('Bash', { command: 'cat .claude/gateway-guard.json' }), null);
+  });
+
   test('the deny message tells the model where to go and not to improvise', () => {
     const reason = pre('Bash', { command: 'sf org list' }).hookSpecificOutput.permissionDecisionReason;
     assert.match(reason, /mcp__gateway__\*/);
