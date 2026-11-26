@@ -8,6 +8,9 @@ description: Full picture of ONE customer account across revenue, renewal, pipel
 **Load `trifecta-metrics` first.** Query through the Claude Databricks
 connector, read-only.
 
+Live dashboard: https://claude.ai/artifact/KdhtLFHSbCG5ehKxwP22Fr (built with `data-dashboard-builder`).
+Open it when someone asks for the dashboard; rebuild it from the kit only when it needs changing.
+
 ## Step 1: Resolve the account
 ```sql
 SELECT Id, Name, Customer_Segment__c, Hosting_Region__c, Industry, BillingCountry, Type,

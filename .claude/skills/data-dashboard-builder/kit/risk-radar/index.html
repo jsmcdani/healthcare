@@ -1,0 +1,362 @@
+<meta name="dash-one-writer">
+<meta name="dash-form" content="dashboard">
+<style>
+.rr { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+.rr-head { display: flex; flex-direction: column; gap: var(--cds-gap-sm); }
+.rr-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.rr-lede { font-size: var(--cds-font-size-heading); margin: 0; max-width: 62ch; line-height: 1.4; }
+.rr-lede b { font-weight: var(--cds-font-weight-medium); font-variant-numeric: tabular-nums; }
+.rr-meta { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: 0; }
+.rr-stale { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-warn); }
+.rr-filters { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); align-items: end; }
+.rr-filters label { display: flex; flex-direction: column; gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.rr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--cds-gap-md); }
+.rr-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
+.rr-kpi-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.rr-kpi-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rr-kpi-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.rr-bad { color: var(--color-bad); }
+.rr-warn { color: var(--color-warn); }
+.rr-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--cds-gap-lg); }
+.rr-section { display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+.rr-section h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.rr-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; }
+.rr-chart { position: relative; min-height: 340px; width: 100%; }
+.rr-bars { position: relative; min-height: 180px; width: 100%; }
+.rr-chart svg, .rr-bars svg { display: block; width: 100%; overflow: visible; }
+.rr-chart .tick text, .rr-bars .tick text, .rr-axis-label { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+.rr-chart .domain, .rr-chart .tick line { stroke: var(--cds-chart-axis); }
+.rr-grid line { stroke: var(--cds-chart-grid); }
+.rr-ref { stroke: var(--cds-chart-reference); stroke-dasharray: 3 3; }
+.rr-ref-label { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); }
+.rr-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); box-shadow: var(--cds-shadow-popover); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); font-size: var(--cds-font-size-caption); max-width: 260px; z-index: 2; }
+.rr-tip strong { display: block; font-size: var(--cds-font-size-body); }
+.rr-tip span { display: block; color: var(--cds-text-secondary); }
+.rr-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; padding: 0; list-style: none; }
+.rr-legend li { display: flex; align-items: center; gap: var(--cds-gap-xs); }
+.rr-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.rr-dot-high { background: var(--color-bad); }
+.rr-dot-elev { background: var(--color-warn); }
+.rr-dot-watch { background: var(--cds-chart-muted); }
+.rr-tablewrap { overflow-x: auto; }
+.rr-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); font-variant-numeric: tabular-nums; }
+.rr-table th { text-align: left; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.rr-table td { padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+.rr-table .num { text-align: right; }
+.rr-pill { display: inline-block; padding: 0 var(--cds-pad-sm); border-radius: 999px; font-size: var(--cds-font-size-caption); border: 1px solid currentColor; margin-left: var(--cds-gap-xs); }
+.rr-pill-High { color: var(--color-bad); }
+.rr-pill-Elevated { color: var(--color-warn); }
+.rr-pill-Watch { color: var(--color-fg-muted); }
+.rr-muted { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.rr-msg { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin: 0; }
+.rr-notes { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.rr-notes summary { cursor: pointer; color: var(--color-fg); }
+.rr-notes ul { margin: var(--cds-gap-sm) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--cds-gap-xs); max-width: 75ch; }
+.rr-bars .rr-bar { cursor: pointer; }
+</style>
+
+<div class="rr">
+  <header class="rr-head" id="header">
+    <h1 class="rr-title">Renewal Risk Radar</h1>
+    <p class="rr-lede" id="takeaway"><b data-draw="num" data-source="summary" data-field="arr_at_risk" data-row="0" data-fmt="money" class="dash-skeleton">—</b> of ARR is at risk across <b data-draw="num" data-source="summary" data-field="accounts" data-row="0" data-fmt="int" class="dash-skeleton">—</b> accounts renewing soon. <b data-draw="num" data-source="summary" data-field="arr_at_risk_incidents" data-row="0" data-fmt="money" class="dash-skeleton">—</b> of that sits with accounts hit by a platform incident in the last 90 days.</p>
+    <p class="rr-meta">Data as of <span data-draw="num" data-source="summary" data-field="data_as_of" data-row="0" data-fmt="date">—</span> · cases and CSAT over the 90 days before that date · days to renewal counted from it</p>
+    <p class="rr-stale" id="stale" hidden>This snapshot is <span data-draw="num" data-source="summary" data-field="days_since_data" data-row="0" data-fmt="int">—</span> days old. Renewals marked † have already passed as of today.</p>
+  </header>
+
+  <div class="rr-filters" id="filters">
+    <label>Segment
+      <select class="dash-select" id="f-segment" aria-label="Segment">
+        <option value="">All segments</option>
+        <option value="Enterprise">Enterprise</option>
+        <option value="Mid-Market">Mid-Market</option>
+        <option value="SMB">SMB</option>
+      </select>
+    </label>
+    <label>Region
+      <select class="dash-select" id="f-region" aria-label="Region">
+        <option value="">All regions</option>
+        <option value="US-East">US-East</option>
+        <option value="US-West">US-West</option>
+        <option value="EU">EU</option>
+        <option value="APAC">APAC</option>
+      </select>
+    </label>
+    <label>Renewing within
+      <select class="dash-select" id="f-window" aria-label="Renewal window">
+        <option value="30">30 days</option>
+        <option value="90">90 days</option>
+        <option value="180">180 days</option>
+        <option value="365">365 days</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="rr-kpis" id="kpis">
+    <div class="rr-card" id="kpi-at-risk">
+      <span class="rr-kpi-label">ARR at risk</span>
+      <span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="summary" data-field="arr_at_risk" data-row="0" data-fmt="money">—</span>
+      <span class="rr-kpi-note">of <span data-draw="num" data-source="summary" data-field="arr_renewing" data-row="0" data-fmt="money">—</span> renewing</span>
+    </div>
+    <div class="rr-card" id="kpi-high">
+      <span class="rr-kpi-label">High risk accounts</span>
+      <span class="rr-kpi-value rr-bad dash-skeleton" data-draw="num" data-source="summary" data-field="high" data-row="0" data-fmt="int">—</span>
+      <span class="rr-kpi-note">score 60 or more</span>
+    </div>
+    <div class="rr-card" id="kpi-elevated">
+      <span class="rr-kpi-label">Elevated risk accounts</span>
+      <span class="rr-kpi-value rr-warn dash-skeleton" data-draw="num" data-source="summary" data-field="elevated" data-row="0" data-fmt="int">—</span>
+      <span class="rr-kpi-note">score 40 to 59</span>
+    </div>
+    <div class="rr-card" id="kpi-days">
+      <span class="rr-kpi-label">Median days to renewal</span>
+      <span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="summary" data-field="median_days_to_renewal" data-row="0" data-fmt="int">—</span>
+      <span class="rr-kpi-note">from the snapshot date</span>
+    </div>
+    <div class="rr-card" id="kpi-incidents">
+      <span class="rr-kpi-label">Accounts hit by incidents</span>
+      <span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="summary" data-field="accounts_hit_by_incidents" data-row="0" data-fmt="int">—</span>
+      <span class="rr-kpi-note">cases linked to an incident, last 90 days</span>
+    </div>
+  </div>
+
+  <div class="rr-grid2">
+    <section class="rr-section" id="scatter">
+      <h2>Who renews soonest, and how risky they are</h2>
+      <p class="rr-sub">Each bubble is an account. Bubble size is ARR. Up and to the left needs attention first.</p>
+      <ul class="rr-legend" aria-hidden="true">
+        <li><span class="rr-dot rr-dot-high"></span>High</li>
+        <li><span class="rr-dot rr-dot-elev"></span>Elevated</li>
+        <li><span class="rr-dot rr-dot-watch"></span>Watch</li>
+      </ul>
+      <div class="rr-chart dash-skeleton" data-draw="scatter" data-source="radar"></div>
+    </section>
+
+    <section class="rr-section" id="regions">
+      <h2>ARR at risk by region</h2>
+      <p class="rr-sub">Click a bar to filter the page to that region.</p>
+      <div class="rr-bars dash-skeleton" data-draw="regionbars" data-source="by_region"></div>
+    </section>
+  </div>
+
+  <section class="rr-section" id="incidents">
+    <h2>Incidents behind the risk</h2>
+    <p class="rr-sub">Platform incidents linked to these accounts' cases in the last 90 days.</p>
+    <div class="rr-tablewrap">
+      <table class="rr-table" data-source="incidents" data-row-key="incident">
+        <thead><tr>
+          <th data-field="incident">Incident</th>
+          <th data-field="severity">Severity</th>
+          <th data-field="component">Component</th>
+          <th data-field="root_cause">Root cause</th>
+          <th data-field="started">Started</th>
+          <th data-field="accounts" class="num">Accounts</th>
+          <th data-field="high_accounts" class="num">High risk</th>
+          <th data-field="arr_at_risk" class="num">ARR at risk</th>
+        </tr></thead>
+        <tbody data-draw="incidentrows"></tbody>
+      </table>
+    </div>
+    <p class="rr-msg" data-draw="incidentmsg"></p>
+  </section>
+
+  <section class="rr-section" id="accounts">
+    <h2>Accounts ranked by ARR at risk</h2>
+    <p class="rr-sub">ARR at risk is ARR multiplied by the risk score. Showing the top 25.</p>
+    <div class="rr-tablewrap">
+      <table class="rr-table" data-source="radar" data-row-key="account_id">
+        <thead><tr>
+          <th data-field="account">Account</th>
+          <th data-field="region">Region</th>
+          <th data-field="arr" class="num">ARR</th>
+          <th data-field="days_to_renewal" class="num">Renews in</th>
+          <th data-field="risk_score" class="num">Risk</th>
+          <th data-field="arr_at_risk" class="num">ARR at risk</th>
+          <th data-field="top_driver">Top driver</th>
+          <th data-field="renewal_stage">Renewal stage</th>
+        </tr></thead>
+        <tbody data-draw="accountrows"></tbody>
+      </table>
+    </div>
+    <p class="rr-msg" data-draw="accountmsg"></p>
+  </section>
+
+  <details class="rr-notes" id="method">
+    <summary>How the risk score works</summary>
+    <ul>
+      <li>Only accounts with at least 5 cases in the last 90 days are scored.</li>
+      <li>The score runs from 0 to 100. SLA breach rate gives up to 35 points (full at 40% of cases breached). Low CSAT gives up to 30 points, on a 1 to 5 scale. When fewer than 3 customers rated their cases, CSAT counts as neutral. The share of Critical and High priority cases gives up to 20 points (full at 50%). Cases linked to a platform incident give up to 15 points (full at 3 cases).</li>
+      <li>Bands: High is 60 or more, Elevated is 40 to 59, Watch is below 40.</li>
+      <li>Top driver is the part of the score that adds the most points.</li>
+      <li>All figures come from the Salesforce data in Databricks (workspace.salesforce_synth), with the same definitions as the risk-radar skill.</li>
+    </ul>
+  </details>
+</div>
+
+<script>
+window.rr = {
+  money(v) {
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + Math.round(n);
+  },
+  int(v) { const n = Number(v); return isFinite(n) ? d3.format(',')(Math.round(n)) : '—'; },
+  date(v) { if (!v) return '—'; const d = new Date(String(v).slice(0, 10) + 'T00:00:00Z'); return isNaN(d) ? String(v) : d3.utcFormat('%b %-d, %Y')(d); },
+  bandColor(b) { return b === 'High' ? 'var(--color-bad)' : b === 'Elevated' ? 'var(--color-warn)' : 'var(--cds-chart-muted)'; },
+  fail(el, s) { el.classList.remove('dash-skeleton'); const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = s.status === 'error' ? "This part didn't load." : 'Waiting for the Databricks connection.'; el.replaceChildren(p); }
+};
+['radar', 'summary', 'incidents', 'by_region'].forEach((id) => {
+  dash.loader(id, { description: 'Reads the Databricks SQL statement result as rows.', fn: ({ answer, read }) => read.databricks(answer) });
+});
+</script>
+
+<script>
+// Filter controls: listen and set values only.
+const fSeg = document.querySelectorAll('#f-segment');
+const fReg = document.querySelectorAll('#f-region');
+const fWin = document.querySelectorAll('#f-window');
+fSeg.forEach((el) => el.addEventListener('change', () => dash.setParams({ segment: el.value })));
+fReg.forEach((el) => el.addEventListener('change', () => dash.setParams({ region: el.value })));
+fWin.forEach((el) => el.addEventListener('change', () => dash.setParams({ window_days: Number(el.value) })));
+dash.onData(() => {
+  const p = dash.params();
+  fSeg.forEach((el) => { if (document.activeElement !== el) el.value = p.segment ?? ''; });
+  fReg.forEach((el) => { if (document.activeElement !== el) el.value = p.region ?? ''; });
+  fWin.forEach((el) => { if (document.activeElement !== el) el.value = String(p.window_days ?? 180); });
+  const s = dash.data('summary');
+  const days = s.status === 'ok' && s.data[0] ? Number(s.data[0].days_since_data) : 0;
+  document.querySelectorAll('#stale').forEach((el) => { el.hidden = !(days > 2); });
+});
+</script>
+
+<script>
+dash.draw('num', (el) => {
+  const s = dash.data(el.dataset.source);
+  if (s.status === 'loading') { el.textContent = '—'; return; }
+  el.classList.remove('dash-skeleton');
+  const row = s.status === 'ok' ? s.data[Number(el.dataset.row || 0)] : null;
+  if (!row) { el.textContent = '—'; return; }
+  const v = row[el.dataset.field];
+  el.textContent = window.rr[el.dataset.fmt] ? window.rr[el.dataset.fmt](v) : String(v ?? '—');
+});
+</script>
+
+<script>
+dash.draw('scatter', (el) => {
+  const s = dash.data('radar');
+  if (s.status === 'loading') return;
+  if (s.status !== 'ok') { window.rr.fail(el, s); return; }
+  el.classList.remove('dash-skeleton');
+  const rows = s.data.map((d) => ({ ...d, days: Number(d.days_to_renewal), score: Number(d.risk_score), arrN: Number(d.arr) }));
+  el.replaceChildren();
+  if (!rows.length) { const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = 'No accounts match these filters.'; el.append(p); return; }
+  const W = Math.max(280, el.clientWidth), H = 340, m = { t: 12, r: 16, b: 40, l: 40 };
+  const maxDays = Number(dash.params().window_days ?? 180);
+  const x = d3.scaleLinear().domain([0, maxDays]).range([m.l, W - m.r]);
+  const y = d3.scaleLinear().domain([0, 100]).range([H - m.b, m.t]);
+  const r = d3.scaleSqrt().domain([0, d3.max(rows, (d) => d.arrN) || 1]).range([2, 16]);
+  const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H)
+    .attr('role', 'img').attr('aria-label', `Scatter of ${rows.length} accounts by days to renewal and risk score, sized by ARR`);
+  svg.append('g').attr('class', 'rr-grid').selectAll('line').data([20, 40, 60, 80, 100]).join('line')
+    .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (d) => y(d)).attr('y2', (d) => y(d));
+  [[60, 'High'], [40, 'Elevated']].forEach(([v, label]) => {
+    svg.append('line').attr('class', 'rr-ref').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(v)).attr('y2', y(v));
+    svg.append('text').attr('class', 'rr-ref-label').attr('x', W - m.r).attr('y', y(v) - 4).attr('text-anchor', 'end').text(label);
+  });
+  const ticks = W < 420 ? 4 : 6;
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(ticks).tickSizeOuter(0));
+  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSizeOuter(0));
+  svg.append('text').attr('class', 'rr-axis-label').attr('x', (m.l + W - m.r) / 2).attr('y', H - 6).attr('text-anchor', 'middle').text('Days to renewal');
+  const tip = d3.select(el).append('div').attr('class', 'rr-tip').style('display', 'none');
+  const order = rows.slice().sort((a, b) => b.arrN - a.arrN);
+  svg.append('g').selectAll('circle').data(order).join('circle')
+    .attr('cx', (d) => x(d.days)).attr('cy', (d) => y(d.score)).attr('r', (d) => r(d.arrN))
+    .style('fill', (d) => window.rr.bandColor(d.risk_band)).style('fill-opacity', 0.55)
+    .style('stroke', (d) => window.rr.bandColor(d.risk_band)).style('stroke-width', 1)
+    .on('pointerenter pointermove', (event, d) => {
+      const [px, py] = d3.pointer(event, el);
+      tip.style('display', 'block').html('');
+      tip.append('strong').text(d.account);
+      tip.append('span').text(`${window.rr.money(d.arr)} ARR · renews in ${d.days} days`);
+      tip.append('span').text(`Risk ${Number(d.risk_score).toFixed(0)} (${d.risk_band}) · ${d.top_driver}`);
+      const tw = 260, left = Math.min(Math.max(0, px + 12), el.clientWidth - tw);
+      tip.style('left', left + 'px').style('top', Math.max(0, py - 70) + 'px');
+    })
+    .on('pointerleave', () => tip.style('display', 'none'));
+});
+</script>
+
+<script>
+dash.draw('regionbars', (el) => {
+  const s = dash.data('by_region');
+  if (s.status === 'loading') return;
+  if (s.status !== 'ok') { window.rr.fail(el, s); return; }
+  el.classList.remove('dash-skeleton');
+  el.replaceChildren();
+  const rows = s.data.map((d) => ({ ...d, v: Number(d.arr_at_risk) }));
+  if (!rows.length) { const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = 'No accounts match these filters.'; el.append(p); return; }
+  const W = Math.max(260, el.clientWidth), bh = 28, gap = 10, m = { t: 4, r: 64, b: 4, l: 72 };
+  const H = m.t + m.b + rows.length * (bh + gap);
+  const x = d3.scaleLinear().domain([0, d3.max(rows, (d) => d.v) || 1]).range([m.l, W - m.r]);
+  const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H)
+    .attr('role', 'img').attr('aria-label', 'Bar chart of ARR at risk by region');
+  const g = svg.selectAll('g.rr-bar').data(rows).join('g').attr('class', 'rr-bar')
+    .attr('transform', (d, i) => `translate(0,${m.t + i * (bh + gap)})`)
+    .on('click', (event, d) => dash.setParams({ region: dash.params().region === d.region ? '' : d.region }));
+  g.append('rect').attr('x', m.l).attr('height', bh).attr('width', (d) => Math.max(1, x(d.v) - m.l)).attr('rx', 3)
+    .style('fill', dash.colors[0]);
+  g.append('text').attr('class', 'rr-axis-label').attr('x', m.l - 8).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text((d) => d.region);
+  g.append('text').attr('class', 'rr-axis-label').attr('x', (d) => x(d.v) + 6).attr('y', bh / 2).attr('dy', '0.35em')
+    .text((d) => `${window.rr.money(d.v)} · ${d.high} high`);
+  g.append('title').text((d) => `${d.region}: ${window.rr.money(d.v)} at risk across ${d.accounts} accounts`);
+});
+</script>
+
+<script>
+dash.draw('incidentrows', (el) => {
+  const s = dash.data('incidents');
+  el.replaceChildren();
+  if (s.status !== 'ok') return;
+  s.data.forEach((d) => {
+    const tr = document.createElement('tr');
+    tr.dataset.key = d.incident;
+    const cells = [d.incident, d.severity, d.component, d.root_cause, window.rr.date(d.started), window.rr.int(d.accounts), window.rr.int(d.high_accounts), window.rr.money(d.arr_at_risk)];
+    cells.forEach((v, i) => { const td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.append(td); });
+    el.append(tr);
+  });
+});
+dash.draw('incidentmsg', (el) => {
+  const s = dash.data('incidents');
+  el.textContent = s.status === 'loading' ? 'Loading…' : s.status === 'error' ? "Incidents didn't load." : s.status === 'ok' && !s.data.length ? 'No incidents touched these accounts in the last 90 days.' : '';
+});
+</script>
+
+<script>
+dash.draw('accountrows', (el) => {
+  const s = dash.data('radar');
+  el.replaceChildren();
+  if (s.status !== 'ok') return;
+  s.data.slice(0, 25).forEach((d) => {
+    const tr = document.createElement('tr');
+    tr.dataset.key = d.account_id;
+    const td = (text, cls) => { const c = document.createElement('td'); c.textContent = text; if (cls) c.className = cls; tr.append(c); return c; };
+    const name = td(d.account);
+    if (d.incidents) { const m = document.createElement('div'); m.className = 'rr-muted'; m.textContent = 'Incident: ' + d.incidents; name.append(m); }
+    td(d.region);
+    td(window.rr.money(d.arr), 'num');
+    const passed = d.renewal_date_passed === true || d.renewal_date_passed === 'true';
+    td(`${window.rr.int(d.days_to_renewal)} d${passed ? ' †' : ''}`, 'num');
+    const risk = td(Number(d.risk_score).toFixed(0), 'num');
+    const pill = document.createElement('span'); pill.className = 'rr-pill rr-pill-' + d.risk_band; pill.textContent = d.risk_band; risk.append(pill);
+    td(window.rr.money(d.arr_at_risk), 'num');
+    td(d.top_driver);
+    td(d.renewal_stage ?? '—');
+    el.append(tr);
+  });
+});
+dash.draw('accountmsg', (el) => {
+  const s = dash.data('radar');
+  el.textContent = s.status === 'loading' ? 'Loading accounts…' : s.status === 'error' ? "The account list didn't load." : s.status === 'ok' && !s.data.length ? 'No accounts match these filters.' : s.truncated ? 'Some accounts are not shown.' : '';
+});
+</script>

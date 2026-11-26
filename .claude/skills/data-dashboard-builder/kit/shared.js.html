@@ -1,0 +1,18 @@
+<script>
+window.rr = {
+  money(v) {
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + Math.round(n);
+  },
+  int(v) { const n = Number(v); return isFinite(n) ? d3.format(',')(Math.round(n)) : '—'; },
+  date(v) { if (!v) return '—'; const d = new Date(String(v).slice(0, 10) + 'T00:00:00Z'); return isNaN(d) ? String(v) : d3.utcFormat('%b %-d, %Y')(d); },
+  bandColor(b) { return b === 'High' ? 'var(--color-bad)' : b === 'Elevated' ? 'var(--color-warn)' : 'var(--cds-chart-muted)'; },
+  fail(el, s) { el.classList.remove('dash-skeleton'); const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = s.status === 'error' ? "This part didn't load." : 'Waiting for the Databricks connection.'; el.replaceChildren(p); }
+};
+['radar', 'summary', 'incidents', 'by_region'].forEach((id) => {
+  dash.loader(id, { description: 'Reads the Databricks SQL statement result as rows.', fn: ({ answer, read }) => read.databricks(answer) });
+});
+</script>

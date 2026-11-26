@@ -8,6 +8,9 @@ description: Build the Renewal Risk Radar, a ranked list or dashboard of account
 **Load `trifecta-metrics` first.** It holds the definitions this skill relies
 on. Query through the Claude Databricks connector, read-only.
 
+Live dashboard: https://claude.ai/artifact/PsjNi32d96WNB1BKC83GTs (built with `data-dashboard-builder`).
+Open it when someone asks for the dashboard; rebuild it from the kit only when it needs changing.
+
 ## Inputs (all optional; fall back to the defaults)
 
 | Input | Default |
