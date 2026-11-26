@@ -539,3 +539,159 @@ BRIEF_DRAWS = top_js[top_js.index("dash.draw('briefname'"): top_js.index("</scri
 sc_html = crm_page(sc_body, sc_js + "\n<script>\n" + BRIEF_DRAWS + "</script>", SC_LOADER + "\n" + BRIEF_LOADER + "\n" + SC_CALCS)
 write("crm_exec", "https://claude.ai/artifact/C1Qy57MDHyPy9GcTxfiATF", {"title": "CRM Executive Scorecard"},
       {"n": 10, "account": "PURDUE UNIVERSITY"}, sc_ds, sc_html)
+
+# ---------------------------------------------------------------- CRM Revenue by Branch (Laundry vs Air)
+def branch_loader(id_, line):
+    return """dash.loader('""" + id_ + """', { description: 'Reads the """ + line + """ branch table out of the CRM agent\\'s answer: branch, account count and average monthly commissionable revenue per account. Section header rows are skipped.', fn: ({ answer }) => {
+    """ + CARD + """
+    const t = tables.find((tb) => tb.head.some((h) => /branch/i.test(h))) || tables[0];
+    if (!t) return { data: [], columns: [], truncated: false, meta };
+    const col = (re) => t.head.findIndex((h) => re.test(h));
+    const bi = Math.max(0, col(/branch/i)), ci = col(/count|accounts/i), ri = col(/revenue/i);
+    const num = (s) => { const v = String(s || '').replace(/[*,$\\s]/g, ''); return /^-?\\d+(\\.\\d+)?$/.test(v) ? Number(v) : null; };
+    const data = [];
+    t.body.forEach((r) => { const b = link(r[bi] || ''); const n = ci >= 0 ? num(r[ci]) : null; if (n == null) return;
+      data.push({ branch: b.text.replace(/\\*/g, '').trim(), account_count: n, avg_monthly_revenue: ri >= 0 ? num(r[ri]) : null }); });
+    return { data, columns: ['branch', 'account_count', 'avg_monthly_revenue'], truncated: false, meta };
+  } });"""
+
+BR_CALCS = """dash.calc('laundry_est', { inputs: ['laundry'], title: 'Laundry: estimated monthly revenue by branch', description: 'Estimated total = account count × average monthly commissionable revenue per account.',
+  fn: (laundry) => laundry.map((d) => ({ branch: d.branch, account_count: d.account_count, avg_monthly_revenue: d.avg_monthly_revenue,
+    est_monthly_revenue: d.avg_monthly_revenue != null ? Math.round(d.account_count * d.avg_monthly_revenue) : null })).sort((a, b) => (b.est_monthly_revenue ?? -1) - (a.est_monthly_revenue ?? -1)) });
+dash.calc('air_est', { inputs: ['air'], title: 'Air: estimated monthly revenue by branch', description: 'Estimated total = account count × average monthly commissionable revenue per account.',
+  fn: (air) => air.map((d) => ({ branch: d.branch, account_count: d.account_count, avg_monthly_revenue: d.avg_monthly_revenue,
+    est_monthly_revenue: d.avg_monthly_revenue != null ? Math.round(d.account_count * d.avg_monthly_revenue) : null })).sort((a, b) => (b.est_monthly_revenue ?? -1) - (a.est_monthly_revenue ?? -1)) });
+dash.calc('lines', { inputs: ['laundry', 'air'], title: 'Business line totals', description: 'Per business line: branches, accounts, accounts with revenue, estimated monthly revenue (sum of account count × average) and the revenue-weighted average per account.',
+  fn: (laundry, air) => [['Laundry', laundry], ['Air', air]].map(([line, rows]) => { const withRev = rows.filter((d) => d.avg_monthly_revenue != null);
+    const est = withRev.reduce((s, d) => s + d.account_count * d.avg_monthly_revenue, 0); const acc = withRev.reduce((s, d) => s + d.account_count, 0);
+    const top = withRev.slice().sort((a, b) => b.account_count * b.avg_monthly_revenue - a.account_count * a.avg_monthly_revenue)[0] || {};
+    return { line, branches: rows.length, branches_with_revenue: withRev.length, accounts: rows.reduce((s, d) => s + d.account_count, 0), accounts_with_revenue: acc,
+      est_monthly_revenue: Math.round(est), avg_per_account: acc ? Math.round(est / acc * 100) / 100 : null, top_branch: top.branch || null,
+      top_branch_est: top.branch ? Math.round(top.account_count * top.avg_monthly_revenue) : null }; }) });"""
+
+br_ds = {
+ "laundry": gw("Laundry branches", "Route (laundry) accounts by Branch: account count and average monthly commissionable revenue per account, from the CRM agent.",
+               "ask", "show account count and total average commissionable revenue by account Branch (Branch__c) for Route accounts, all branches"),
+ "air": gw("Air branches", "Air record type accounts by Air Area Branch: account count and average monthly commissionable revenue per account, from the CRM agent.",
+           "ask", "show account count and total average commissionable revenue by Air Area Branch (Air_Area_Branch__c) for Air record type accounts, all branches"),
+}
+
+br_body = """<div class="rr">
+  <header class="rr-head" id="header">
+    <h1 class="rr-title">CRM Revenue by Branch</h1>
+    <p class="rr-lede" id="takeaway">Laundry brings in an estimated <b data-draw="num" data-source="lines" data-field="est_monthly_revenue" data-where="line=Laundry" data-fmt="money" class="dash-skeleton">—</b> a month across <b data-draw="num" data-source="lines" data-field="accounts" data-where="line=Laundry" data-fmt="int" class="dash-skeleton">—</b> accounts. Air brings in <b data-draw="num" data-source="lines" data-field="est_monthly_revenue" data-where="line=Air" data-fmt="money" class="dash-skeleton">—</b> across <b data-draw="num" data-source="lines" data-field="accounts" data-where="line=Air" data-fmt="int" class="dash-skeleton">—</b>.</p>
+    <p class="rr-gov">Live from Salesforce through the CRM gateway, run as the person viewing. The two business lines have separate branch networks: Laundry accounts (record type Route) roll up to Branch, Air accounts (record type Air) to Air Area Branch.</p>
+  </header>
+
+  <div class="rr-kpis" id="lines">
+    <div class="rr-card" id="kpi-laundry"><span class="rr-kpi-label">Laundry, estimated monthly revenue</span>
+      <span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="lines" data-field="est_monthly_revenue" data-where="line=Laundry" data-fmt="money">—</span>
+      <span class="rr-kpi-note"><span data-draw="num" data-source="lines" data-field="branches_with_revenue" data-where="line=Laundry" data-fmt="int">—</span> branches · <span data-draw="num" data-source="lines" data-field="avg_per_account" data-where="line=Laundry" data-fmt="money">—</span> per account</span></div>
+    <div class="rr-card" id="kpi-air"><span class="rr-kpi-label">Air, estimated monthly revenue</span>
+      <span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="lines" data-field="est_monthly_revenue" data-where="line=Air" data-fmt="money">—</span>
+      <span class="rr-kpi-note"><span data-draw="num" data-source="lines" data-field="branches_with_revenue" data-where="line=Air" data-fmt="int">—</span> branches · <span data-draw="num" data-source="lines" data-field="avg_per_account" data-where="line=Air" data-fmt="money">—</span> per account</span></div>
+    <div class="rr-card" id="kpi-top-laundry"><span class="rr-kpi-label">Largest Laundry branch</span>
+      <span class="rr-kpi-value dash-skeleton" style="font-size: var(--cds-font-size-heading)" data-draw="num" data-source="lines" data-field="top_branch" data-where="line=Laundry">—</span>
+      <span class="rr-kpi-note"><span data-draw="num" data-source="lines" data-field="top_branch_est" data-where="line=Laundry" data-fmt="money">—</span> a month, estimated</span></div>
+    <div class="rr-card" id="kpi-top-air"><span class="rr-kpi-label">Largest Air branch</span>
+      <span class="rr-kpi-value dash-skeleton" style="font-size: var(--cds-font-size-heading)" data-draw="num" data-source="lines" data-field="top_branch" data-where="line=Air">—</span>
+      <span class="rr-kpi-note"><span data-draw="num" data-source="lines" data-field="top_branch_est" data-where="line=Air" data-fmt="money">—</span> a month, estimated</span></div>
+  </div>
+
+  <div class="rr-filters" id="filters">
+    <label>Business line<select class="dash-select" id="f-line" aria-label="Business line"><option value="laundry">Laundry</option><option value="air">Air</option></select></label>
+  </div>
+
+  <section class="rr-section" id="ranking">
+    <h2 data-draw="rankhead">Estimated monthly revenue by branch</h2>
+    <p class="rr-sub">Account count multiplied by average revenue per account. Top 20 branches.</p>
+    <div class="rr-bars dash-skeleton" data-draw="branchbars" data-source="laundry_est air_est"></div>
+  </section>
+
+  <section class="rr-section" id="mix">
+    <h2>Volume or value</h2>
+    <p class="rr-sub">Each dot is a branch. Right means more accounts; up means more revenue per account. Dot size is estimated monthly revenue. Dashed lines are the line's averages.</p>
+    <div class="rr-chart dash-skeleton" data-draw="mixchart" data-source="laundry_est air_est"></div>
+  </section>
+
+  <section class="rr-section" id="table">
+    <h2>All branches</h2>
+    <div class="rr-tablewrap" id="t-laundry"><table class="rr-table" data-source="laundry_est" data-row-key="branch">
+      <thead><tr><th data-field="branch">Branch</th><th data-field="account_count" class="num">Accounts</th><th data-field="avg_monthly_revenue" class="num">Per account, monthly</th><th data-field="est_monthly_revenue" class="num">Estimated monthly total</th></tr></thead>
+      <tbody data-draw="rows_laundry"></tbody></table></div>
+    <div class="rr-tablewrap" id="t-air" hidden><table class="rr-table" data-source="air_est" data-row-key="branch">
+      <thead><tr><th data-field="branch">Branch</th><th data-field="account_count" class="num">Accounts</th><th data-field="avg_monthly_revenue" class="num">Per account, monthly</th><th data-field="est_monthly_revenue" class="num">Estimated monthly total</th></tr></thead>
+      <tbody data-draw="rows_air"></tbody></table></div>
+    <p class="rr-msg" data-draw="norev"></p>
+  </section>
+
+  <details class="rr-notes" id="method">
+    <summary>How this page gets its data</summary>
+    <ul>
+      <li>Laundry: Salesforce accounts with record type Route, grouped by the Branch lookup (Branch__c). Air: accounts with record type Air, grouped by Air Area Branch (Air_Area_Branch__c). Line of Business (Line_of_Business__c) is blank in Salesforce, so record type is the split.</li>
+      <li>Revenue is Average Commissionable Revenue: each account's average gross monthly revenue over the last 90 days of collections. The CRM agent returns the average per account in each branch. The page estimates a branch total as accounts × that average.</li>
+      <li>Branches the agent lists with no revenue (for example the Super Laundry branches) count toward accounts but not revenue, and are listed under the table.</li>
+      <li>Branch fields on Opportunity are formulas and can't be grouped, so this page works from Account, not Opportunity.</li>
+    </ul>
+  </details>
+</div>"""
+
+br_js = """<script>
+const fLine = document.querySelectorAll('#f-line');
+fLine.forEach((el) => el.addEventListener('change', () => dash.setParams({ line: el.value })));
+dash.onData(() => { const p = dash.params(); fLine.forEach((el) => { if (document.activeElement !== el) el.value = p.line || 'laundry'; });
+  document.querySelectorAll('#t-laundry').forEach((t) => { t.hidden = p.line === 'air'; }); document.querySelectorAll('#t-air').forEach((t) => { t.hidden = p.line !== 'air'; }); });
+const cur = () => (dash.params().line === 'air' ? 'air_est' : 'laundry_est');
+const lineName = () => (dash.params().line === 'air' ? 'Air' : 'Laundry');
+dash.draw('rankhead', (el) => { el.textContent = `${lineName()}: estimated monthly revenue by branch`; });
+dash.draw('branchbars', (el) => {
+  const s = dash.data(cur());
+  if (s.status === 'loading') return;
+  if (s.status !== 'ok') { window.rr.fail(el, s); return; }
+  el.classList.remove('dash-skeleton');
+  const rows = s.data.filter((d) => d.est_monthly_revenue != null).slice(0, 20);
+  window.rr.hbars(el, rows, { label: (d) => d.branch, value: (d) => d.est_monthly_revenue, right: 120,
+    color: () => (dash.params().line === 'air' ? dash.colors[1] || dash.colors[0] : dash.colors[0]),
+    valueText: (d) => `${window.rr.money(d.est_monthly_revenue)} · ${window.rr.int(d.account_count)} accts`, aria: `${lineName()} estimated monthly revenue by branch`, empty: 'The CRM agent returned no branches this time. Reload to ask again.' });
+});
+dash.draw('mixchart', (el) => {
+  const s = dash.data(cur());
+  if (s.status === 'loading') return;
+  if (s.status !== 'ok') { window.rr.fail(el, s); return; }
+  el.classList.remove('dash-skeleton'); el.replaceChildren();
+  const rows = s.data.filter((d) => d.avg_monthly_revenue != null);
+  if (!rows.length) { const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = 'No branches with revenue.'; el.append(p); return; }
+  const W = Math.max(280, el.clientWidth), H = 340, m = { t: 14, r: 16, b: 40, l: 56 };
+  const x = d3.scaleLinear().domain([0, d3.max(rows, (d) => d.account_count) * 1.05]).nice().range([m.l, W - m.r]);
+  const y = d3.scaleLinear().domain([0, d3.max(rows, (d) => d.avg_monthly_revenue) * 1.1]).nice().range([H - m.b, m.t]);
+  const r = d3.scaleSqrt().domain([0, d3.max(rows, (d) => d.est_monthly_revenue) || 1]).range([3, 18]);
+  const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).attr('role', 'img').attr('aria-label', `${lineName()} branches by account count and revenue per account`);
+  svg.append('g').attr('class', 'rr-grid').selectAll('line').data(y.ticks(5)).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', (d) => y(d)).attr('y2', (d) => y(d));
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(W < 480 ? 4 : 6).tickFormat(d3.format('~s')).tickSizeOuter(0));
+  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((v) => '$' + d3.format('~s')(v)).tickSizeOuter(0));
+  svg.append('text').attr('class', 'rr-axis-label').attr('x', (m.l + W - m.r) / 2).attr('y', H - 6).attr('text-anchor', 'middle').text('Accounts');
+  const ax = d3.mean(rows, (d) => d.account_count), ay = d3.sum(rows, (d) => d.est_monthly_revenue) / d3.sum(rows, (d) => d.account_count);
+  svg.append('line').attr('class', 'rr-ref').attr('x1', x(ax)).attr('x2', x(ax)).attr('y1', m.t).attr('y2', H - m.b);
+  svg.append('line').attr('class', 'rr-ref').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(ay)).attr('y2', y(ay));
+  const tip = d3.select(el).append('div').attr('class', 'rr-tip').style('display', 'none');
+  const color = dash.params().line === 'air' ? (dash.colors[1] || dash.colors[0]) : dash.colors[0];
+  svg.append('g').selectAll('circle').data(rows.slice().sort((a, b) => b.est_monthly_revenue - a.est_monthly_revenue)).join('circle')
+    .attr('cx', (d) => x(d.account_count)).attr('cy', (d) => y(d.avg_monthly_revenue)).attr('r', (d) => r(d.est_monthly_revenue))
+    .style('fill', color).style('fill-opacity', 0.5).style('stroke', color)
+    .on('pointerenter pointermove', (event, d) => { const [px, py] = d3.pointer(event, el); tip.style('display', 'block').html('');
+      tip.append('strong').text(d.branch); tip.append('span').text(`${window.rr.int(d.account_count)} accounts · ${window.rr.money(d.avg_monthly_revenue)} each a month`);
+      tip.append('span').text(`About ${window.rr.money(d.est_monthly_revenue)} a month in total`);
+      tip.style('left', Math.min(Math.max(0, px + 12), el.clientWidth - 240) + 'px').style('top', Math.max(0, py - 64) + 'px'); })
+    .on('pointerleave', () => tip.style('display', 'none'));
+  const lab = rows.slice().sort((a, b) => b.est_monthly_revenue - a.est_monthly_revenue).slice(0, W < 480 ? 3 : 6);
+  svg.append('g').selectAll('text').data(lab).join('text').attr('class', 'rr-axis-label').attr('x', (d) => x(d.account_count) + r(d.est_monthly_revenue) + 3).attr('y', (d) => y(d.avg_monthly_revenue)).attr('dy', '0.35em').text((d) => d.branch);
+});
+['laundry', 'air'].forEach((k) => dash.draw('rows_' + k, (el) => window.rr.tbody(el, k + '_est', 'branch', [
+  { f: 'branch' }, { f: 'account_count', fmt: 'int', num: true }, { f: 'avg_monthly_revenue', fmt: 'money', num: true }, { f: 'est_monthly_revenue', fmt: 'money', num: true }])));
+dash.draw('norev', (el) => { const s = dash.data(cur()); if (s.status !== 'ok') { el.textContent = s.status === 'loading' ? 'Loading…' : ''; return; }
+  const none = s.data.filter((d) => d.avg_monthly_revenue == null);
+  el.textContent = none.length ? `No revenue recorded for ${none.length} branch${none.length > 1 ? 'es' : ''}: ${none.map((d) => d.branch).join(', ')}.` : ''; });
+</script>"""
+
+br_html = crm_page(br_body, br_js, branch_loader("laundry", "Laundry") + "\n" + branch_loader("air", "Air") + "\n" + BR_CALCS)
+write("crm_branch", "https://claude.ai/artifact/N1Yu3MDQmHTaikZ48BL6wp", {"title": "CRM Revenue by Branch"}, {"line": "laundry"}, br_ds, br_html)

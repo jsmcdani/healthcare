@@ -10,6 +10,13 @@ governed agents, not tables. You never write SOQL or SQL, and raw records never
 enter the model's context. Every call runs **as the signed-in user**, with their
 Salesforce access and their persona (for example `sales_rep`).
 
+## Two business lines: always keep them separate
+The CRM holds **Laundry** (Account record type **Route**, branches in `Branch__c`) and **Air**
+(record type **Air**, regions in `Air_Area_Branch__c`). They have different branch networks and
+very different revenue per account (about $900 vs about $350 a month). Report them side by side,
+never blended. `Line_of_Business__c` is blank, so split on record type. See `crm-revenue-by-branch`
+for field details.
+
 ## Which agent to call
 
 | Need | Tool | Example query (pass the user's words verbatim) |
@@ -23,6 +30,7 @@ Rules:
   ("only the worst 5") goes to the **same** tool as the request it refines.
 - **Stay inside the role.** `pipeline_my` is the rep's own pipeline, not a team or org view.
   A tool outside the role is refused; say so rather than working around it.
+- **Phrasing:** avoid "sum", "grouped", "rollup" and "metadata". The router sends them to a warehouse that isn't connected. Use "show … by …". For field metadata, use `coworker_search`: "find the record for X and list its <topic> fields with API names and values".
 - **Writes are proposals.** Some suggested next steps ("Clean up my past-due opps") would
   change records. The gateway returns a proposal that needs explicit confirmation. Never
   confirm one yourself, and never put a write in a dashboard.
