@@ -351,3 +351,191 @@ dash.draw('oppmsg', (el) => window.rr.msg(el, 'opps', 'No open opportunities. Ni
 
 write("crm_pipe", "https://claude.ai/artifact/B8uPLH5zbyNGoTQvKc5a7C", {"title": "My CRM Pipeline"}, None, pipe_ds,
       crm_page(pipe_body, pipe_js, HEALTH_LOADER + "\n" + OPPS_LOADER + "\n" + FORECAST_LOADER))
+
+# ---------------------------------------------------------------- CRM Executive Scorecard
+SC_LOADER = """dash.loader('sc', { description: 'Reads the scorecard table out of the CRM agent\\'s answer: account, owner, branch, average monthly revenue, contract expiration, machines and service calls. Also keeps the agent\\'s observations.', fn: ({ answer }) => {
+    """ + CARD + """
+    const t = tables[0];
+    if (!t) return { data: [], columns: [], truncated: false, meta };
+    const col = (re, not) => t.head.findIndex((h) => re.test(h) && !(not && not.test(h)));
+    const ai = Math.max(0, col(/account|name/i)), oi = col(/owner/i), bi = col(/branch/i), ri = col(/revenue/i), ci = col(/contract|expir/i), mi = col(/machine/i), si = col(/service/i);
+    const M = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const day = (s) => { const t2 = String(s || '').replace(/\\*\\*/g, ''); let m = /([A-Za-z]{3})[a-z]*\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})/.exec(t2);
+      if (m && M[m[1].toLowerCase()] != null) return new Date(Date.UTC(+m[3], M[m[1].toLowerCase()], +m[2])).toISOString().slice(0, 10);
+      m = /(\\d{4})-(\\d{2})-(\\d{2})/.exec(t2); return m ? m[0] : null; };
+    const num = (s) => { const t2 = String(s || '').replace(/[*,$\\s]/g, ''); return /^-?\\d+(\\.\\d+)?$/.test(t2) ? Number(t2) : null; };
+    const notes = lines.filter((l, k) => (k < t.start || k >= t.end) && /^\\s*[-*]\\s/.test(l)).map((l) => l.trim().replace(/^[-*]\\s+/, '')).join('\\n');
+    const data = t.body.map((r, k) => { const a = link(r[ai] || '');
+      return { rank: k + 1, account: a.text, account_id: a.id, url: a.url,
+        owner: oi >= 0 ? r[oi].replace(/\\*\\*/g, '') : null, branch: bi >= 0 ? r[bi].replace(/\\*\\*/g, '') : null,
+        avg_monthly_revenue: ri >= 0 ? money(r[ri]) : null, contract_expiration: ci >= 0 ? day(r[ci]) : null,
+        machines: mi >= 0 ? num(r[mi]) : null, ltm_service_calls: si >= 0 ? num(r[si]) : null, agent_notes: notes }; });
+    return { data, columns: ['rank', 'account', 'owner', 'branch', 'avg_monthly_revenue', 'contract_expiration', 'machines', 'ltm_service_calls', 'account_id', 'url', 'agent_notes'], truncated: false, meta };
+  } });"""
+
+SC_CALCS = """dash.calc('sc_accounts', { inputs: ['sc'], title: 'Contract status and service load', description: 'For each account: whether the contract has expired or expires within 12 months of today, and service calls per machine over the last 12 months.',
+  fn: (sc) => { const today = new Date().toISOString().slice(0, 10); const in12 = new Date(Date.now() + 365 * 864e5).toISOString().slice(0, 10);
+    return sc.map((d) => ({ account: d.account,
+      contract_status: !d.contract_expiration ? 'Unknown' : d.contract_expiration < today ? 'Expired' : d.contract_expiration <= in12 ? 'Within 12 months' : 'Active',
+      calls_per_machine: d.machines > 0 && d.ltm_service_calls != null ? Math.round((d.ltm_service_calls / d.machines) * 100) / 100 : null })); } });
+dash.calc('sc_summary', { inputs: ['sc'], title: 'Scorecard totals', description: 'Revenue across the accounts shown, contracts expired or expiring within 12 months, the busiest account for service, and the owner with the most top accounts.',
+  fn: (sc) => { const today = new Date().toISOString().slice(0, 10); const in12 = new Date(Date.now() + 365 * 864e5).toISOString().slice(0, 10);
+    const expired = sc.filter((d) => d.contract_expiration && d.contract_expiration < today);
+    const soon = sc.filter((d) => d.contract_expiration && d.contract_expiration >= today && d.contract_expiration <= in12);
+    const busiest = sc.filter((d) => d.ltm_service_calls != null).sort((a, b) => b.ltm_service_calls - a.ltm_service_calls)[0] || {};
+    const owners = {}; sc.forEach((d) => { if (!d.owner) return; owners[d.owner] = owners[d.owner] || { n: 0, rev: 0 }; owners[d.owner].n++; owners[d.owner].rev += d.avg_monthly_revenue || 0; });
+    const top = Object.entries(owners).sort((a, b) => b[1].n - a[1].n || b[1].rev - a[1].rev)[0] || [null, { n: 0, rev: 0 }];
+    return [{ accounts: sc.length, total_revenue: sc.reduce((s, d) => s + (d.avg_monthly_revenue || 0), 0),
+      expired: expired.length, expired_revenue: expired.reduce((s, d) => s + (d.avg_monthly_revenue || 0), 0), expiring_12m: soon.length,
+      busiest_account: busiest.account || null, busiest_calls: busiest.ltm_service_calls ?? null,
+      top_owner: top[0], top_owner_accounts: top[1].n, top_owner_revenue: top[1].rev }]; } });
+dash.calc('sc_owners', { inputs: ['sc'], title: 'Top accounts by owner', description: 'How many of the accounts shown each owner holds, and their combined average monthly revenue.',
+  fn: (sc) => { const m = {}; sc.forEach((d) => { const k = d.owner || 'Unassigned'; m[k] = m[k] || { owner: k, accounts: 0, avg_monthly_revenue: 0 }; m[k].accounts++; m[k].avg_monthly_revenue += d.avg_monthly_revenue || 0; });
+    return Object.values(m).sort((a, b) => b.avg_monthly_revenue - a.avg_monthly_revenue); } });"""
+
+sc_ds = {
+ "sc": gw("Executive scorecard", "The CRM agent's top accounts by average monthly commissionable revenue, with owner, branch, contract expiration, machines and service calls.",
+          "ask", "top {{n}} accounts by revenue with account owner, branch, contract expiration date, machine count and LTM service calls", {"n": {"enum": [10, 20]}}),
+ "brief": top_ds["brief"],
+}
+
+sc_body = """<div class="rr">
+  <header class="rr-head" id="header">
+    <h1 class="rr-title">CRM Executive Scorecard</h1>
+    <p class="rr-lede" id="takeaway">The top <b data-draw="num" data-source="sc_summary" data-field="accounts" data-row="0" data-fmt="int" class="dash-skeleton">—</b> accounts bring in <b data-draw="num" data-source="sc_summary" data-field="total_revenue" data-row="0" data-fmt="money" class="dash-skeleton">—</b> a month. <b data-draw="num" data-source="sc_summary" data-field="expired" data-row="0" data-fmt="int" class="dash-skeleton">—</b> of them, worth <b data-draw="num" data-source="sc_summary" data-field="expired_revenue" data-row="0" data-fmt="money" class="dash-skeleton">—</b> a month, are on expired contracts.</p>
+    <p class="rr-gov">Live from Salesforce through the CRM gateway. Each query runs as the person viewing the page. Revenue is average monthly commissionable revenue over the last 90 days of collections.</p>
+  </header>
+  <div class="rr-filters" id="filters">
+    <label>Show<select class="dash-select" id="f-n" aria-label="How many accounts"><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
+  </div>
+  <div class="rr-kpis" id="kpis">
+    <div class="rr-card" id="kpi-revenue"><span class="rr-kpi-label">Monthly revenue, accounts shown</span><span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="sc_summary" data-field="total_revenue" data-row="0" data-fmt="money">—</span><span class="rr-kpi-note">average over the last 90 days</span></div>
+    <div class="rr-card" id="kpi-expired"><span class="rr-kpi-label">Expired contracts</span><span class="rr-kpi-value rr-bad dash-skeleton" data-draw="num" data-source="sc_summary" data-field="expired" data-row="0" data-fmt="int">—</span><span class="rr-kpi-note"><span data-draw="num" data-source="sc_summary" data-field="expired_revenue" data-row="0" data-fmt="money">—</span> a month exposed</span></div>
+    <div class="rr-card" id="kpi-soon"><span class="rr-kpi-label">Expiring within 12 months</span><span class="rr-kpi-value rr-warn dash-skeleton" data-draw="num" data-source="sc_summary" data-field="expiring_12m" data-row="0" data-fmt="int">—</span><span class="rr-kpi-note">start renewal talks now</span></div>
+    <div class="rr-card" id="kpi-service"><span class="rr-kpi-label">Most service calls</span><span class="rr-kpi-value dash-skeleton" data-draw="num" data-source="sc_summary" data-field="busiest_calls" data-row="0" data-fmt="int">—</span><span class="rr-kpi-note" data-draw="num" data-source="sc_summary" data-field="busiest_account" data-row="0">—</span></div>
+    <div class="rr-card" id="kpi-owner"><span class="rr-kpi-label">Owner concentration</span><span class="rr-kpi-value dash-skeleton"><span data-draw="num" data-source="sc_summary" data-field="top_owner_accounts" data-row="0" data-fmt="int">—</span> accounts</span><span class="rr-kpi-note" data-draw="num" data-source="sc_summary" data-field="top_owner" data-row="0">—</span></div>
+  </div>
+  <section class="rr-section" id="runway">
+    <h2>Contract runway</h2>
+    <p class="rr-sub">When each top account's contract ends. Left of the Today line means already expired. Dot size is monthly revenue.</p>
+    <ul class="rr-legend" aria-hidden="true">
+      <li><span class="rr-dot" style="background: var(--color-bad)"></span>Expired</li>
+      <li><span class="rr-dot" style="background: var(--color-warn)"></span>Within 12 months</li>
+      <li><span class="rr-dot" style="background: var(--cds-chart-muted)"></span>Active</li>
+    </ul>
+    <div class="rr-chart dash-skeleton" data-draw="runway" data-source="sc sc_accounts"></div>
+  </section>
+  <div class="rr-grid2">
+    <section class="rr-section" id="service">
+      <h2>Service load: calls per machine, last 12 months</h2>
+      <p class="rr-sub">High numbers can mean failing equipment or an unhappy customer.</p>
+      <div class="rr-bars dash-skeleton" data-draw="servicebars" data-source="sc_accounts"></div>
+    </section>
+    <section class="rr-section" id="owners">
+      <h2>Who owns the top accounts</h2>
+      <div class="rr-tablewrap"><table class="rr-table" data-source="sc_owners" data-row-key="owner">
+        <thead><tr><th data-field="owner">Owner</th><th data-field="accounts" class="num">Accounts</th><th data-field="avg_monthly_revenue" class="num">Monthly revenue</th></tr></thead>
+        <tbody data-draw="ownerrows"></tbody></table></div>
+    </section>
+  </div>
+  <section class="rr-section" id="scorecard">
+    <h2>Scorecard</h2>
+    <p class="rr-sub">Click an account name for a full briefing below.</p>
+    <div class="rr-tablewrap"><table class="rr-table" data-source="sc" data-row-key="account">
+      <thead><tr><th data-field="rank">#</th><th data-field="account">Account</th><th data-field="owner">Owner</th><th data-field="branch">Branch</th><th data-field="avg_monthly_revenue" class="num">Monthly revenue</th><th data-field="contract_expiration">Contract ends</th><th data-field="machines" class="num">Machines</th><th data-field="ltm_service_calls" class="num">Service calls, 12 mo</th><th data-field="calls_per_machine" data-source="sc_accounts" class="num">Calls per machine</th></tr></thead>
+      <tbody data-draw="scrows"></tbody></table></div>
+    <p class="rr-msg" data-draw="scmsg"></p>
+  </section>
+  <section class="rr-section" id="agent-notes">
+    <h2>What the CRM agent noticed</h2>
+    <ul class="rr-brief" data-draw="notes" data-source="sc"></ul>
+  </section>
+  <section class="rr-section" id="briefing">
+    <h2>Briefing: <span data-draw="briefname">—</span></h2>
+    <p class="rr-sub">From the Coworker agent. Contact emails and phone numbers are hidden on this page. A briefing can take up to a minute.</p>
+    <div class="rr-kpis" data-draw="briefkpis" data-source="brief"></div>
+    <div class="rr-brief dash-skeleton" data-draw="brief" data-source="brief"></div>
+  </section>
+  <details class="rr-notes" id="method">
+    <summary>How this page gets its data</summary>
+    <ul>
+      <li>The scorecard is one question to the CRM gateway's analytics agent: the top accounts by revenue with owner, branch, contract expiration, machine count and service calls over the last 12 months.</li>
+      <li>Contract status, calls per machine and the owner totals are worked out on this page from that answer. Expired means the contract end date is before today.</li>
+      <li>The agent writes its answer in natural language. The page reads the first table in it, so a reworded answer can leave a column empty until the next load.</li>
+    </ul>
+  </details>
+</div>"""
+
+sc_js = """<script>
+const fN = document.querySelectorAll('#f-n');
+fN.forEach((el) => el.addEventListener('change', () => dash.setParams({ n: Number(el.value) })));
+dash.onData(() => { const p = dash.params(); fN.forEach((el) => { if (document.activeElement !== el) el.value = String(p.n ?? 10); }); });
+const pick = (name) => { if (window.rr.SAFE_NAME.test(name)) dash.setParams({ account: name }); };
+const statusOf = (name) => { const c = dash.data('sc_accounts'); return c.status === 'ok' ? (c.data.find((d) => d.account === name) || {}) : {}; };
+const statusColor = (s) => (s === 'Expired' ? 'var(--color-bad)' : s === 'Within 12 months' ? 'var(--color-warn)' : 'var(--cds-chart-muted)');
+dash.draw('runway', (el) => {
+  const s = dash.data('sc');
+  if (s.status === 'loading') return;
+  if (s.status !== 'ok') { window.rr.fail(el, s); return; }
+  el.classList.remove('dash-skeleton'); el.replaceChildren();
+  const rows = s.data.filter((d) => d.contract_expiration).map((d) => ({ ...d, dt: new Date(d.contract_expiration + 'T00:00:00Z'), st: statusOf(d.account).contract_status }))
+    .sort((a, b) => a.dt - b.dt);
+  if (!rows.length) { const p = document.createElement('p'); p.className = 'rr-msg'; p.textContent = 'No contract dates in this answer.'; el.append(p); return; }
+  const today = new Date();
+  const W = Math.max(280, el.clientWidth), rh = 26, m = { t: 8, r: 20, b: 30, l: Math.min(220, W * 0.42) };
+  const H = m.t + m.b + rows.length * rh;
+  const x = d3.scaleUtc().domain(d3.extent([...rows.map((d) => d.dt), today])).nice().range([m.l, W - m.r]);
+  const r = d3.scaleSqrt().domain([0, d3.max(rows, (d) => d.avg_monthly_revenue) || 1]).range([3, 11]);
+  const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H).attr('role', 'img').attr('aria-label', 'Contract end dates for the top accounts, with today marked');
+  svg.append('g').attr('class', 'rr-grid').selectAll('line').data(x.ticks(W < 480 ? 4 : 8)).join('line').attr('x1', (d) => x(d)).attr('x2', (d) => x(d)).attr('y1', m.t).attr('y2', H - m.b);
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(W < 480 ? 4 : 8).tickSizeOuter(0));
+  svg.append('line').attr('class', 'rr-ref').attr('x1', x(today)).attr('x2', x(today)).attr('y1', m.t).attr('y2', H - m.b);
+  svg.append('text').attr('class', 'rr-ref-label').attr('x', x(today) + 4).attr('y', m.t + 10).text('Today');
+  const tip = d3.select(el).append('div').attr('class', 'rr-tip').style('display', 'none');
+  const g = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (d, i) => `translate(0,${m.t + i * rh + rh / 2})`).style('cursor', 'pointer').on('click', (e, d) => pick(d.account));
+  g.append('text').attr('class', 'rr-axis-label').attr('x', m.l - 8).attr('dy', '0.35em').attr('text-anchor', 'end').text((d) => d.account.length > 30 ? d.account.slice(0, 29) + '…' : d.account);
+  g.append('line').attr('x1', m.l).attr('x2', (d) => x(d.dt)).style('stroke', 'var(--cds-chart-grid)');
+  g.append('circle').attr('cx', (d) => x(d.dt)).attr('r', (d) => r(d.avg_monthly_revenue || 0)).style('fill', (d) => statusColor(d.st))
+    .on('pointerenter pointermove', (event, d) => { const [px, py] = d3.pointer(event, el); tip.style('display', 'block').html('');
+      tip.append('strong').text(d.account); tip.append('span').text(`Contract ends ${window.rr.date(d.contract_expiration)} · ${d.st || ''}`);
+      tip.append('span').text(`${window.rr.money(d.avg_monthly_revenue)} a month · owner ${d.owner || '—'}`);
+      tip.style('left', Math.min(Math.max(0, px + 12), el.clientWidth - 240) + 'px').style('top', Math.max(0, py - 60) + 'px'); })
+    .on('pointerleave', () => tip.style('display', 'none'));
+});
+dash.draw('servicebars', (el) => {
+  const c = dash.data('sc_accounts');
+  if (c.status === 'loading') return;
+  if (c.status !== 'ok') { window.rr.fail(el, c); return; }
+  el.classList.remove('dash-skeleton');
+  const rows = c.data.filter((d) => d.calls_per_machine != null).sort((a, b) => b.calls_per_machine - a.calls_per_machine);
+  const top = rows.length ? rows[0].calls_per_machine : 0;
+  window.rr.hbars(el, rows, { label: (d) => d.account.length > 26 ? d.account.slice(0, 25) + '…' : d.account, value: (d) => d.calls_per_machine, right: 50,
+    color: (d) => (d.calls_per_machine >= 1.5 ? 'var(--color-warn)' : dash.colors[0]),
+    valueText: (d) => d.calls_per_machine.toFixed(2), aria: 'Service calls per machine for each top account', onClick: (d) => pick(d.account), empty: 'No machine counts in this answer.' });
+});
+dash.draw('ownerrows', (el) => window.rr.tbody(el, 'sc_owners', 'owner', [{ f: 'owner' }, { f: 'accounts', fmt: 'int', num: true }, { f: 'avg_monthly_revenue', fmt: 'money', num: true }]));
+dash.draw('scrows', (el) => window.rr.tbody(el, 'sc', 'account', [
+  { f: 'rank', fmt: 'int' },
+  { f: 'account', render: (td, d) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'rr-linkbtn'; b.textContent = d.account; b.disabled = !window.rr.SAFE_NAME.test(d.account); b.addEventListener('click', () => pick(d.account)); td.append(b);
+      if (d.url && /^https:\\/\\//.test(d.url)) { const a = document.createElement('a'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'rr-link rr-muted'; a.textContent = ' ↗'; a.setAttribute('aria-label', 'Open in Salesforce'); td.append(a); } } },
+  { f: 'owner' }, { f: 'branch' }, { f: 'avg_monthly_revenue', fmt: 'money', num: true },
+  { f: 'contract_expiration', render: (td, d) => { td.textContent = window.rr.date(d.contract_expiration); const st = statusOf(d.account).contract_status;
+      if (st === 'Expired' || st === 'Within 12 months') { const p = document.createElement('span'); p.className = 'rr-pill ' + (st === 'Expired' ? 'rr-pill-High' : 'rr-pill-Elevated'); p.textContent = st === 'Expired' ? 'Expired' : 'Soon'; td.append(p); } } },
+  { f: 'machines', fmt: 'int', num: true }, { f: 'ltm_service_calls', fmt: 'int', num: true },
+  { f: 'calls_per_machine', num: true, render: (td, d) => { const v = statusOf(d.account).calls_per_machine; td.textContent = v == null ? '—' : v.toFixed(2); } }]));
+dash.draw('scmsg', (el) => window.rr.msg(el, 'sc', 'The CRM agent returned no table this time. Reload to ask again.'));
+dash.draw('notes', (el) => {
+  const s = dash.data('sc'); el.replaceChildren();
+  if (s.status !== 'ok' || !s.data.length) return;
+  const notes = String(s.data[0].agent_notes || '').split('\\n').filter(Boolean);
+  if (!notes.length) { const li = document.createElement('li'); li.className = 'rr-muted'; li.textContent = 'No observations this time.'; el.append(li); return; }
+  notes.forEach((n) => { const li = document.createElement('li'); window.rr.inline(li, n, ''); el.append(li); });
+});
+</script>
+<style>.rr-linkbtn { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--color-border-line); text-underline-offset: 2px; } .rr-linkbtn:hover { text-decoration-color: currentColor; } .rr-linkbtn:disabled { cursor: default; text-decoration: none; }</style>"""
+
+# reuse the briefing drawings from the top-accounts page
+BRIEF_DRAWS = top_js[top_js.index("dash.draw('briefname'"): top_js.index("</script>")]
+sc_html = crm_page(sc_body, sc_js + "\n<script>\n" + BRIEF_DRAWS + "</script>", SC_LOADER + "\n" + BRIEF_LOADER + "\n" + SC_CALCS)
+write("crm_exec", "https://claude.ai/artifact/C1Qy57MDHyPy9GcTxfiATF", {"title": "CRM Executive Scorecard"},
+      {"n": 10, "account": "PURDUE UNIVERSITY"}, sc_ds, sc_html)

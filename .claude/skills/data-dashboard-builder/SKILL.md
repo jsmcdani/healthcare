@@ -6,7 +6,7 @@ description: The house recipe for building live Claude Data dashboards on Databr
 # Building a live dashboard, the house way
 
 Every dashboard here is a **Claude Data** dashboard: an artifact whose numbers come from
-live queries that run as each viewer. Six are built. Reuse them before making a new one.
+live queries that run as each viewer. Seven are built. Reuse them before making a new one.
 
 ## Existing dashboards
 
@@ -18,6 +18,7 @@ live queries that run as each viewer. Six are built. Reuse them before making a 
 | Pipeline Health | https://claude.ai/artifact/XTcXboGewENJooF3DThh6r | Databricks | `pipeline-health` |
 | CRM Top Accounts | https://claude.ai/artifact/HETfVogcbMN4rMddCK77Lb | CRM gateway | `crm-top-accounts` |
 | My CRM Pipeline | https://claude.ai/artifact/B8uPLH5zbyNGoTQvKc5a7C | CRM gateway | `crm-my-pipeline` |
+| CRM Executive Scorecard | https://claude.ai/artifact/C1Qy57MDHyPy9GcTxfiATF | CRM gateway | `crm-exec-scorecard` |
 
 ## The kit (`kit/`)
 
@@ -25,9 +26,9 @@ live queries that run as each viewer. Six are built. Reuse them before making a 
 |---|---|
 | `build.py` | Shared style (`shared.css.html`) and helpers (`shared.js.html`): money/percent/date formatters, a generic marked number (`data-draw="num"`), table body renderer, horizontal bars, risk pills. Also `ds()` to make a Databricks dataset (it keeps only the rules a query uses), `page()` to assemble a page, and `write()` to emit the batch documents plus test SQL with default filters filled in. |
 | `build_pages.py` | Account 360, Expansion Radar and Pipeline Health: SQL, page HTML and drawing code. |
-| `build_crm.py` | The two CRM dashboards: gateway datasets, card-parsing loaders (tables, briefings, scores) and a safe Markdown renderer. |
+| `build_crm.py` | The three CRM dashboards: gateway datasets, card-parsing loaders (tables, briefings, scores) and a safe Markdown renderer. |
 | `risk-radar/` | The Risk Radar's SQL and page. |
-| `test_loaders.js` | Runs the CRM loaders against sample gateway answers in node. |
+| `test_loaders.js`, `test_exec.js` | Run the CRM loaders and calcs against sample gateway answers in node. |
 
 Run `python3 build.py` (Databricks pages) or `python3 build_crm.py` (CRM pages) from `kit/`.
 Each writes `<name>/batch.json`, which holds the documents to write with `ArtifactData` `batch`.
