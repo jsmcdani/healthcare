@@ -603,7 +603,7 @@ br_body = """<div class="rr">
   </div>
 
   <section class="rr-section" id="ranking">
-    <h2 data-draw="rankhead">Estimated monthly revenue by branch</h2>
+    <h2><span data-draw="rankhead">—</span>: estimated monthly revenue by branch</h2>
     <p class="rr-sub">Account count multiplied by average revenue per account. Top 20 branches.</p>
     <div class="rr-bars dash-skeleton" data-draw="branchbars" data-source="laundry_est air_est"></div>
   </section>
@@ -643,7 +643,7 @@ dash.onData(() => { const p = dash.params(); fLine.forEach((el) => { if (documen
   document.querySelectorAll('#t-laundry').forEach((t) => { t.hidden = p.line === 'air'; }); document.querySelectorAll('#t-air').forEach((t) => { t.hidden = p.line !== 'air'; }); });
 const cur = () => (dash.params().line === 'air' ? 'air_est' : 'laundry_est');
 const lineName = () => (dash.params().line === 'air' ? 'Air' : 'Laundry');
-dash.draw('rankhead', (el) => { el.textContent = `${lineName()}: estimated monthly revenue by branch`; });
+dash.draw('rankhead', (el) => { el.textContent = lineName(); });
 dash.draw('branchbars', (el) => {
   const s = dash.data(cur());
   if (s.status === 'loading') return;
