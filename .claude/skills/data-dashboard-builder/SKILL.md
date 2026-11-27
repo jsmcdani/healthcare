@@ -6,7 +6,7 @@ description: The house recipe for building live Claude Data dashboards on Databr
 # Building a live dashboard, the house way
 
 Every dashboard here is a **Claude Data** dashboard: an artifact whose numbers come from
-live queries that run as each viewer. Eight are built. Reuse them before making a new one.
+live queries that run as each viewer. Nine are built. Reuse them before making a new one.
 
 ## Existing dashboards
 
@@ -20,6 +20,7 @@ live queries that run as each viewer. Eight are built. Reuse them before making 
 | My CRM Pipeline | https://claude.ai/artifact/B8uPLH5zbyNGoTQvKc5a7C | CRM gateway | `crm-my-pipeline` |
 | CRM Executive Scorecard | https://claude.ai/artifact/C1Qy57MDHyPy9GcTxfiATF | CRM gateway | `crm-exec-scorecard` |
 | CRM Revenue by Branch | https://claude.ai/artifact/N1Yu3MDQmHTaikZ48BL6wp | CRM gateway | `crm-revenue-by-branch` |
+| Trifecta Command Center (prototype) | https://claude.ai/artifact/ELxMoZA76SFCgTrrNQ6M1P | Trifecta + Databricks stand-ins | `trifecta-command-center` |
 
 ## The kit (`kit/`)
 
@@ -29,7 +30,8 @@ live queries that run as each viewer. Eight are built. Reuse them before making 
 | `build_pages.py` | Account 360, Expansion Radar and Pipeline Health: SQL, page HTML and drawing code. |
 | `build_crm.py` | The four CRM dashboards: gateway datasets, card-parsing loaders (tables, briefings, scores) and a safe Markdown renderer. |
 | `risk-radar/` | The Risk Radar's SQL and page. |
-| `test_loaders.js`, `test_exec.js`, `test_branch.js` | Run the CRM loaders and calcs against sample gateway answers in node. |
+| `build_trifecta.py` | The Trifecta prototype: a generic loader for the gateway's structured `table` field, live panels that fall back to labeled stand-ins, and the join check. |
+| `test_tri.js`, `test_loaders.js`, `test_exec.js`, `test_branch.js` | Run the CRM loaders and calcs against sample gateway answers in node. |
 
 Run `python3 build.py` (Databricks pages) or `python3 build_crm.py` (CRM pages) from `kit/`.
 Each writes `<name>/batch.json`, which holds the documents to write with `ArtifactData` `batch`.
