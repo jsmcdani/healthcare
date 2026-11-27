@@ -6,7 +6,7 @@ description: The house recipe for building live Claude Data dashboards on Databr
 # Building a live dashboard, the house way
 
 Every dashboard here is a **Claude Data** dashboard: an artifact whose numbers come from
-live queries that run as each viewer. Nine are built. Reuse them before making a new one.
+live queries that run as each viewer. Ten are built. Reuse them before making a new one.
 
 ## Existing dashboards
 
@@ -20,6 +20,7 @@ live queries that run as each viewer. Nine are built. Reuse them before making a
 | My CRM Pipeline | https://claude.ai/artifact/B8uPLH5zbyNGoTQvKc5a7C | CRM gateway | `crm-my-pipeline` |
 | CRM Executive Scorecard | https://claude.ai/artifact/C1Qy57MDHyPy9GcTxfiATF | CRM gateway | `crm-exec-scorecard` |
 | CRM Revenue by Branch | https://claude.ai/artifact/N1Yu3MDQmHTaikZ48BL6wp | CRM gateway | `crm-revenue-by-branch` |
+| Incident Management | https://claude.ai/artifact/4R3dgA9ndSksVwgebZGBZ4 | Databricks sample + live ServiceNow slot (Trifecta) | `incident-management` |
 | Trifecta Command Center (prototype) | https://claude.ai/artifact/ELxMoZA76SFCgTrrNQ6M1P | Trifecta + Databricks stand-ins | `trifecta-command-center` |
 
 ## The kit (`kit/`)
